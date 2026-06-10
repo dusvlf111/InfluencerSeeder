@@ -59,7 +59,13 @@ a = Analysis(
         "PyQt6.QtCore",
         "PyQt6.QtGui",
         "PyQt6.QtWidgets",
+        "PyQt6.QtNetwork",
         "PyQt6.sip",
+        # PyQt6 WebEngine (embedded Instagram browser). These are imported
+        # behind a try/except in ui.main_window, so list them explicitly or
+        # PyInstaller won't bundle QtWebEngineProcess + its resources.
+        "PyQt6.QtWebEngineCore",
+        "PyQt6.QtWebEngineWidgets",
     ],
     hookspath=[],
     hooksconfig={},
@@ -70,18 +76,21 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
+# ── onedir build ────────────────────────────────────────────────────────────
+# QtWebEngine (the embedded browser) does NOT work with PyInstaller's onefile
+# mode: QtWebEngineProcess.exe and the ICU/locale resources must live on disk,
+# not be unpacked to a temp dir at launch. So the EXE carries only the scripts
+# (exclude_binaries=True) and COLLECT gathers binaries/data into an app folder.
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name=APP_NAME,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    upx_exclude=[],
     runtime_tmpdir=None,
     console=False,          # 콘솔창 없음
     disable_windowed_traceback=False,
@@ -92,10 +101,20 @@ exe = EXE(
     # icon="assets/icon.ico",  # Windows 아이콘 (준비 시 주석 해제)
 )
 
-# macOS .app 번들
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name=APP_NAME,
+)
+
+# macOS .app 번들 (onedir COLLECT 를 감싼다)
 if sys.platform == "darwin":
     app = BUNDLE(
-        exe,
+        coll,
         name=APP_NAME + ".app",
         # icon="assets/icon.icns",  # macOS 아이콘 (준비 시 주석 해제)
         bundle_identifier="com.letscxreer.influencerseeder",

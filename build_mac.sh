@@ -27,6 +27,25 @@ _stop_spinner() {
     printf "\r%-70s\n" "      done."
 }
 
+# On any non-zero exit, stop the spinner, surface the build log, and keep the
+# Terminal window open so the error is readable.
+_on_exit() {
+    code=$?
+    _stop_spinner 2>/dev/null || true
+    if [ "$code" -ne 0 ]; then
+        echo ""
+        echo "============================================================"
+        echo "[ERROR] 빌드가 실패했습니다 (종료코드 $code)."
+        if [ -f /tmp/pyinstaller.log ]; then
+            echo "--- /tmp/pyinstaller.log (마지막 40줄) ---"
+            tail -40 /tmp/pyinstaller.log
+        fi
+        echo "============================================================"
+        read -r -p "엔터를 누르면 창을 닫습니다..." _
+    fi
+}
+trap _on_exit EXIT
+
 echo ""
 echo "============================================================"
 echo "  InfluencerSeeder - macOS Build Script"
@@ -124,28 +143,31 @@ fi
 
 VENV_PY="$VENV_DIR/bin/python"
 
-# ----- Step 3: Install packages -----
+# ----- Step 3: Install packages (from requirements.txt + pyinstaller) -----
+# requirements.txt includes PyQt6-WebEngine — required for the embedded
+# Instagram browser. Installing from the file keeps deps in one place.
 echo ""
 echo "[3/5] Installing packages (first run: 2-5 minutes)..."
-
-PACKAGES=("PyQt6" "selenium" "webdriver-manager" "pyinstaller")
-TOTAL=${#PACKAGES[@]}
 
 _start_spinner "Upgrading pip"
 $VENV_PY -m pip install --upgrade pip > /tmp/pip_install.log 2>&1 || true
 _stop_spinner
 
-for i in "${!PACKAGES[@]}"; do
-    PKG="${PACKAGES[$i]}"
-    NUM=$(( i + 1 ))
-    _start_spinner "[$NUM/$TOTAL] $PKG"
-    $VENV_PY -m pip install "$PKG" --quiet >> /tmp/pip_install.log 2>&1 || {
-        _stop_spinner
-        echo "[ERROR] Failed to install $PKG. See /tmp/pip_install.log"
-        exit 1
-    }
+_start_spinner "Installing requirements.txt (PyQt6, PyQt6-WebEngine, selenium, ...)"
+$VENV_PY -m pip install -r requirements.txt >> /tmp/pip_install.log 2>&1 || {
     _stop_spinner
-done
+    echo "[ERROR] Failed to install requirements.txt. See /tmp/pip_install.log"
+    exit 1
+}
+_stop_spinner
+
+_start_spinner "Installing pyinstaller"
+$VENV_PY -m pip install pyinstaller >> /tmp/pip_install.log 2>&1 || {
+    _stop_spinner
+    echo "[ERROR] Failed to install pyinstaller. See /tmp/pip_install.log"
+    exit 1
+}
+_stop_spinner
 echo "      All packages installed."
 
 # ----- Step 4: Build .app -----
