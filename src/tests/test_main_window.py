@@ -69,6 +69,30 @@ class TestTray:
         window.closeEvent(ev)
         ev.accept.assert_called_once()
 
+    def test_restore_from_tray_clears_minimized(self, window):
+        # showMinimized then restore → not minimized, no exception (offscreen).
+        window.show()
+        window.showMinimized()
+        window._restore_from_tray()
+        assert window.isMinimized() is False
+
+    def test_close_to_tray_saves_geometry(self, window):
+        # With a tray, closeEvent hides to tray and records geometry for restore.
+        window._tray = MagicMock()
+        window._force_quit = False
+        window.show()
+        ev = MagicMock()
+        window.closeEvent(ev)
+        ev.ignore.assert_called_once()
+        assert getattr(window, "_saved_geometry", None) is not None
+
+    def test_restore_after_geometry_saved_no_exception(self, window):
+        # Saving then restoring geometry round-trips without error.
+        window.show()
+        window._saved_geometry = window.saveGeometry()
+        window._restore_from_tray()
+        assert window.isMinimized() is False
+
 
 # ── 4.3 Resume ──────────────────────────────────────────────────────────────
 

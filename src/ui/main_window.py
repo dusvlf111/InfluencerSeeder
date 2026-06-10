@@ -276,9 +276,16 @@ class MainWindow(QMainWindow):
             self._restore_from_tray()
 
     def _restore_from_tray(self):
+        """트레이에서 복귀: 최소화 상태를 해제하고 숨기기 직전의 geometry 를 복원해
+        실행 중 화면을 원래 크기/위치로 다시 보여준다(§4)."""
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+        geo = getattr(self, "_saved_geometry", None)
+        if geo is not None:
+            self.restoreGeometry(geo)
         self.showNormal()
-        self.activateWindow()
+        self.show()
         self.raise_()
+        self.activateWindow()
 
     def _quit_from_tray(self):
         self._force_quit = True
@@ -302,6 +309,8 @@ class MainWindow(QMainWindow):
             and self._tray is not None
         ):
             event.accept()
+            # 숨기기 직전 geometry 저장 → 복귀 시 원래 크기/위치 복원(§4).
+            self._saved_geometry = self.saveGeometry()
             # defer hide so the state change settles
             self.hide()
             self._notify_tray("백그라운드 실행 중", "트레이에서 계속 수집합니다")
@@ -312,6 +321,8 @@ class MainWindow(QMainWindow):
         # 트레이 사용 가능 + 강제종료 아님 → 닫기 대신 트레이로 숨김(§4).
         if self._tray is not None and not getattr(self, "_force_quit", False):
             event.ignore()
+            # 숨기기 직전 geometry 저장 → 복귀 시 원래 크기/위치 복원(§4).
+            self._saved_geometry = self.saveGeometry()
             self.hide()
             self._notify_tray("백그라운드 실행 중", "트레이에서 계속 수집합니다")
             return
