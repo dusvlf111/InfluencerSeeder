@@ -419,7 +419,19 @@ class EmbeddedScraper(QObject):
         if not ok:
             self._log("  [skip] 검색 아이콘 클릭 실패 → 다음 키워드")
             return self._after("step1", self._next_keyword)
-        self._after("step1", self._do_type)
+        # 검색 아이콘 클릭 후, 검색창을 먼저 클릭해 활성화(포커스)해야 입력이
+        # 인스타 검색에 반영된다(클릭 없이 값만 넣으면 검색이 안 됨).
+        self._after("step1", self._click_search_box)
+
+    def _click_search_box(self):
+        self._step("검색창 클릭(활성화)")
+        self._click("search_input", self._after_click_box)
+
+    def _after_click_box(self, ok):
+        if not ok:
+            self._log("  [warn] 검색창 클릭 실패 — 입력만으로 시도")
+        # 클릭 성공/실패와 무관하게 잠시 후 입력(포커스가 잡혔을 수 있음).
+        self._after("step2", self._do_type)
 
     def _do_type(self):
         self._step(f"검색어 입력: #{self._cur_keyword}")
