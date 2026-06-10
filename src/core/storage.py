@@ -7,8 +7,6 @@ from core.storage_defaults import (
     _FLOW_DEFAULTS,
     _TARGET_DEFAULTS,
     _DELAY_DEFAULTS,
-    _SELECTOR_DEFAULTS,
-    _SELECTOR_FIELDNAMES,
 )
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -189,58 +187,6 @@ def save_delays(data: dict):
             writer.writerow([sid, lo, hi])
 
 
-# ── Selectors (§2.2 — priority fallback 체인) ──────────────────────────────────
-
-def selector_defaults() -> list[dict]:
-    return [dict(row) for row in _SELECTOR_DEFAULTS]
-
-
-def _normalize_selector_row(row: dict) -> dict:
-    out = {k: (row.get(k) if row.get(k) is not None else "") for k in _SELECTOR_FIELDNAMES}
-    # priority: 결측/비숫자 → 1 (하위호환), int 화
-    prio = _coerce(out.get("priority") or "")
-    out["priority"] = prio if isinstance(prio, int) else 1
-    return out
-
-
-def load_selectors() -> list[dict]:
-    """Load selectors; sorted by (step_id stable order, priority asc)."""
-    path = _path("selectors.csv")
-    if not path.exists():
-        save_selectors(_SELECTOR_DEFAULTS)
-        return selector_defaults()
-    try:
-        rows = []
-        with open(path, newline="", encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
-                rows.append(_normalize_selector_row(row))
-        if not rows:
-            return selector_defaults()
-    except Exception:
-        return selector_defaults()
-    # priority 오름차순 정렬 (결측은 9999). step_id 첫 등장 순서를 안정 유지.
-    order: dict[str, int] = {}
-    for r in rows:
-        order.setdefault(r["step_id"], len(order))
-    rows.sort(key=lambda r: (
-        order[r["step_id"]],
-        r["priority"] if isinstance(r["priority"], int) else 9999,
-    ))
-    return rows
-
-
-def save_selectors(rows: list[dict]):
-    path = _path("selectors.csv")
-    with open(path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=_SELECTOR_FIELDNAMES, extrasaction="ignore")
-        writer.writeheader()
-        for row in rows:
-            out = dict(row)
-            if not str(out.get("priority", "")).strip():
-                out["priority"] = 1
-            writer.writerow(out)
-
-
 # ── Results path primitive (§3.1) — stays in facade as path single-source ───────
 
 def results_path() -> Path:
@@ -251,6 +197,11 @@ def results_path() -> Path:
 
 # State (§3.3 — 재개용 진행 상태)
 from core.storage_state import load_state, save_state, clear_state  # noqa: E402
+
+# Selectors (§2.2 — priority fallback 체인)
+from core.storage_selectors import (  # noqa: E402
+    selector_defaults, _normalize_selector_row, load_selectors, save_selectors,
+)
 
 # Results / Excluded (§3.1 / §3.2)
 from core.storage_results import (  # noqa: E402
