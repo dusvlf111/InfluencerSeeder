@@ -82,7 +82,8 @@ else
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+# This script sits next to src/; the app sources live inside src/.
+cd "$SCRIPT_DIR/src"
 
 # ----- Ensure Google Chrome -----
 # Selenium launches Chrome at runtime. On macOS the NSS libraries are bundled
@@ -154,8 +155,8 @@ echo ""
 
 rm -rf build_tmp
 
-# Output the .app/.dmg next to src/ (project root), not inside a dist/ subfolder.
-OUT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Output the .app/.dmg next to src/ (project root = this script's folder).
+OUT_DIR="$SCRIPT_DIR"
 
 _start_spinner "Running PyInstaller"
 $VENV_PY -m PyInstaller build.spec \

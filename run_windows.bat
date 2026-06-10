@@ -5,7 +5,8 @@ chcp 65001 > nul 2>&1
 :: Double-click this file to run the app directly from source.
 :: (For installation/packaging, use build_windows.bat)
 
-cd /d "%~dp0"
+:: This script sits next to src\; the app sources live inside src\.
+cd /d "%~dp0src"
 
 echo.
 echo ============================================================

@@ -2,6 +2,9 @@
 setlocal enabledelayedexpansion
 chcp 65001 > nul 2>&1
 
+:: This script sits next to src\; the app sources live inside src\.
+cd /d "%~dp0src"
+
 echo.
 echo ============================================================
 echo   InfluencerSeeder - Windows Build Script
@@ -148,8 +151,8 @@ echo.
 
 if exist "build_tmp" rmdir /s /q build_tmp
 
-:: Output the app next to src\ (project root), not inside a dist\ subfolder.
-pushd "%~dp0.."
+:: Output the app next to src\ (project root = this script's folder).
+pushd "%~dp0"
 set "OUT_DIR=%CD%"
 popd
 
