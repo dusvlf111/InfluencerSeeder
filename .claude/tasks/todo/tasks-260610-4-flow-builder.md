@@ -107,19 +107,19 @@ order,phase,step_name,action,selector_ref,param,enabled
     - [x] P2.3 `register("hashtag", ConfigurableFlow)`; 기존 `HashtagFlow` 는 `register("hashtag_legacy", ...)` 로 보존(폴백/회귀 비교용).
     - [x] P2.T `tests/test_flows.py`: 기본 flow_steps 로 `ConfigurableFlow` 가 HashtagFlow 와 **동일 신호·로그·append_result 호출**(Mock driver), enabled=false 스텝 스킵, go_back 동작, 미지원 action 무시. **전체 pytest 통과(222 passed)**. 커밋: `feat(flows): data-driven ConfigurableFlow from flow_steps.csv`
 
-- [ ] **P3 — settings UI: 버튼매핑 탭 재설계(이미지+가이드+셀렉터)**
-    - [ ] P3.1 "Selectors" 탭 → **"버튼매핑"** 탭: step_id 그룹별 카드(`QScrollArea`) — 상단 `QLabel`(pixmap = `guide_image_path`), 그 아래 **가이드 텍스트**("브라우저에서 요소 우클릭 → 검사(Inspect) → 강조된 요소 우클릭 → Copy → **Copy XPath**(또는 Copy selector) → 아래 값 칸에 붙여넣기. type 은 xpath/css/coord."), 그 아래 해당 step 의 **셀렉터 후보 표**(priority/type/value 행 추가·삭제·정렬).
-    - [ ] P3.2 디자인 토큰만 사용(`design/tokens.py`), objectName 부여 후 `design/stylesheet.py` 규칙. hex 직접 작성 금지.
-    - [ ] P3.T 앱 실행 — 카드/이미지/가이드/표 렌더 + 저장 왕복 확인. 커밋: `feat(settings): button-mapping cards with screenshots + XPath guide`
+- [x] **P3 — settings UI: 버튼매핑 탭 재설계(이미지+가이드+셀렉터)**
+    - [x] P3.1 "Selectors" 탭 → **"버튼매핑"** 탭: step_id 그룹별 카드(`QScrollArea`) — 상단 `QLabel`(pixmap = `guide_image_path`), 그 아래 **가이드 텍스트**("브라우저에서 요소 우클릭 → 검사(Inspect) → 강조된 요소 우클릭 → Copy → **Copy XPath**(또는 Copy selector) → 아래 값 칸에 붙여넣기. type 은 xpath/css/coord."), 그 아래 해당 step 의 **셀렉터 후보 표**(priority/type/value 행 추가·삭제·정렬).
+    - [x] P3.2 디자인 토큰만 사용(`design/tokens.py`), objectName 부여 후 `design/stylesheet.py` 규칙. hex 직접 작성 금지.
+    - [x] P3.T 앱 실행 — 카드/이미지/가이드/표 렌더 + 저장 왕복 확인. 커밋: `feat(settings): button-mapping cards with screenshots + XPath guide`
 
-- [ ] **P4 — settings UI: 플로우 빌더**
-    - [ ] P4.1 신규 **"플로우"** 탭: flow_steps 표(order/phase/step_name/action(드롭다운=`FLOW_ACTIONS`)/selector_ref(드롭다운=selectors step_id)/param/enabled(체크박스)). **행 추가/삭제/위로/아래로**(order 재계산), [기본 플로우로 초기화].
-    - [ ] P4.2 `_collect_flow_steps()/_populate` 연동 + `save_flow_steps` 를 `_save_all` 에 추가.
-    - [ ] P4.T 앱 실행 — 스텝 추가(예: go_back/wait)·순서변경·저장 후 재로드 유지 확인. 커밋: `feat(settings): dynamic flow builder tab`
+- [x] **P4 — settings UI: 플로우 빌더**
+    - [x] P4.1 신규 **"플로우"** 탭: flow_steps 표(order/phase/step_name/action(드롭다운=`FLOW_ACTIONS`)/selector_ref(드롭다운=selectors step_id)/param/enabled(체크박스)). **행 추가/삭제/위로/아래로**(order 재계산), [기본 플로우로 초기화].
+    - [x] P4.2 `_collect_flow_steps()/_populate` 연동 + `save_flow_steps` 를 `_save_all` 에 추가.
+    - [x] P4.T 앱 실행 — 스텝 추가(예: go_back/wait)·순서변경·저장 후 재로드 유지 확인. 커밋: `feat(settings): dynamic flow builder tab`
 
-- [ ] **P5 — settings UI: 설정 CSV 폴더 가져오기/내보내기**
-    - [ ] P5.1 헤더에 **[설정 내보내기] [설정 불러오기]** 버튼. 내보내기=`getExistingDirectory` 선택 폴더에 각 CSV 저장(`export_config_to_dir`). 불러오기=`getExistingDirectory` 선택 폴더에서 `import_config_from_dir` → 반영 목록을 `QMessageBox` 로 요약 + `load()` 재호출로 UI 갱신.
-    - [ ] P5.T 폴더로 export → 값 변경/초기화 → 같은 폴더 import 왕복으로 설정 복원 확인. 커밋: `feat(settings): import/export config as a shareable folder of CSVs`
+- [x] **P5 — settings UI: 설정 CSV 폴더 가져오기/내보내기**
+    - [x] P5.1 헤더에 **[설정 내보내기] [설정 불러오기]** 버튼. 내보내기=`getExistingDirectory` 선택 폴더에 각 CSV 저장(`export_config_to_dir`). 불러오기=`getExistingDirectory` 선택 폴더에서 `import_config_from_dir` → 반영 목록을 `QMessageBox` 로 요약 + `load()` 재호출로 UI 갱신.
+    - [x] P5.T 폴더로 export → 값 변경/초기화 → 같은 폴더 import 왕복으로 설정 복원 확인. 커밋: `feat(settings): import/export config as a shareable folder of CSVs`
 
 ---
 

@@ -205,4 +205,25 @@ QLabel#labelMuted {{
 QLabel#labelAccent {{
     color: {C.accent_light};
 }}
+
+/* ── Button-mapping cards (settings) ── */
+QFrame#mappingCard {{
+    background-color: {C.surface};
+    border: 1px solid {C.border};
+    border-radius: {R.lg}px;
+}}
+QLabel#cardTitle {{
+    color: {C.accent_light};
+    font-size: {T.size_large}px;
+    font-weight: 700;
+}}
+QLabel#mappingGuide {{
+    color: {C.muted2};
+    font-size: {T.size_small}px;
+}}
+QLabel#guideImage {{
+    background-color: {C.bg};
+    border: 1px solid {C.border};
+    border-radius: {R.md}px;
+}}
 """

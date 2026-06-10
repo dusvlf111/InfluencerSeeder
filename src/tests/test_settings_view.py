@@ -36,9 +36,12 @@ class TestTabsAndPopulate:
         for name in ("Web", "Delays", "Flow", "Target", "Excluded"):
             assert name in labels
 
-    def test_existing_selectors_tab_kept(self, view):
+    def test_mapping_and_flow_tabs_present(self, view):
+        # P3/P4: "Selectors" 탭은 "버튼매핑" 카드 탭으로 교체되고 "플로우" 탭이 추가됨.
         labels = [view._tabs.tabText(i) for i in range(view._tabs.count())]
-        assert "Selectors" in labels
+        assert "버튼매핑" in labels
+        assert "플로우" in labels
+        assert "Selectors" not in labels
 
     def test_web_widgets_exist_and_defaults(self, view):
         view.load()
@@ -162,3 +165,189 @@ class TestSaveAll:
         view._save_all()
         for name in ("web.csv", "delays.csv", "flow.csv", "target.csv", "excluded.csv"):
             assert (tmp_path / name).exists()
+
+    def test_save_all_writes_flow_steps_csv(self, view, tmp_path):
+        view.load()
+        view._save_all()
+        assert (tmp_path / "flow_steps.csv").exists()
+        assert (tmp_path / "selectors.csv").exists()
+
+
+# ── P3: 버튼매핑 카드 ──────────────────────────────────────────────────────────
+
+
+class TestMappingCards:
+    def test_one_card_per_distinct_step_id(self, view):
+        view.load()
+        selectors = storage.load_selectors()
+        distinct = []
+        for row in selectors:
+            sid = row.get("step_id")
+            if sid and sid not in distinct:
+                distinct.append(sid)
+        assert list(view._mapping_tables.keys()) == distinct
+
+    def test_card_table_rows_match_candidate_count(self, view):
+        view.load()
+        # search_icon has 3 priority candidates in defaults.
+        table = view._mapping_tables["search_icon"]
+        assert table.rowCount() == 3
+        assert table.item(0, 0).text() in ("1", "1.0")
+
+    def test_collect_selectors_round_trip(self, view):
+        view.load()
+        before = storage.load_selectors()
+        rows = view._collect_selectors()
+        # same total candidate count, priority is int, step_id preserved
+        assert len(rows) == len(before)
+        assert all(isinstance(r["priority"], int) for r in rows)
+        assert all(r["step_id"] for r in rows)
+
+    def test_edit_value_persists_through_save(self, view):
+        view.load()
+        table = view._mapping_tables["search_icon"]
+        from PyQt6.QtWidgets import QTableWidgetItem
+        table.setItem(0, 2, QTableWidgetItem("//a[@id='edited']"))
+        view._save_all()
+        reloaded = storage.load_selectors()
+        edited = [r for r in reloaded if r["step_id"] == "search_icon"]
+        assert any(r["selector_value"] == "//a[@id='edited']" for r in edited)
+
+    def test_add_and_delete_candidate(self, view):
+        view.load()
+        table = view._mapping_tables["tag_result"]
+        n0 = table.rowCount()
+        view._mapping_add_row(table)
+        assert table.rowCount() == n0 + 1
+        table.selectRow(table.rowCount() - 1)
+        view._mapping_del_row(table)
+        assert table.rowCount() == n0
+
+    def test_move_candidate_swaps_rows(self, view):
+        view.load()
+        table = view._mapping_tables["search_icon"]
+        from PyQt6.QtWidgets import QTableWidgetItem
+        table.setItem(0, 2, QTableWidgetItem("AAA"))
+        table.setItem(1, 2, QTableWidgetItem("BBB"))
+        table.selectRow(0)
+        view._mapping_move_row(table, 1)
+        assert table.item(0, 2).text() == "BBB"
+        assert table.item(1, 2).text() == "AAA"
+
+    def test_mapping_rebuilds_on_reload(self, view):
+        view.load()
+        view.load()  # second load must not duplicate cards
+        assert len(view._mapping_tables) == len({
+            r["step_id"] for r in storage.load_selectors()
+        })
+
+
+# ── P4: 플로우 빌더 ────────────────────────────────────────────────────────────
+
+
+class TestFlowBuilder:
+    def test_flow_table_populated_from_defaults(self, view):
+        view.load()
+        assert view._flow_table.rowCount() == len(storage.flow_steps_defaults())
+
+    def test_collect_flow_steps_shape(self, view):
+        view.load()
+        rows = view._collect_flow_steps()
+        assert rows
+        first = rows[0]
+        for key in ("order", "phase", "step_name", "action", "selector_ref", "param", "enabled"):
+            assert key in first
+        assert all(isinstance(r["enabled"], bool) for r in rows)
+        assert all(isinstance(r["order"], int) for r in rows)
+
+    def test_collect_matches_defaults_actions(self, view):
+        view.load()
+        rows = view._collect_flow_steps()
+        actions = [r["action"] for r in rows]
+        assert actions == [r["action"] for r in storage.flow_steps_defaults()]
+
+    def test_add_row_increments(self, view):
+        view.load()
+        n0 = view._flow_table.rowCount()
+        view._flow_add_row()
+        assert view._flow_table.rowCount() == n0 + 1
+        # order renumbered consecutively
+        last = view._flow_table.item(view._flow_table.rowCount() - 1, 0).text()
+        assert last == str(view._flow_table.rowCount())
+
+    def test_delete_row(self, view):
+        view.load()
+        n0 = view._flow_table.rowCount()
+        view._flow_table.selectRow(0)
+        view._flow_del_row()
+        assert view._flow_table.rowCount() == n0 - 1
+
+    def test_move_row_reorders_actions(self, view):
+        view.load()
+        before = [r["action"] for r in view._collect_flow_steps()]
+        view._flow_table.selectRow(0)
+        view._flow_move_row(1)
+        after = [r["action"] for r in view._collect_flow_steps()]
+        assert after[0] == before[1]
+        assert after[1] == before[0]
+
+    def test_reset_to_defaults(self, view):
+        view.load()
+        view._flow_add_row()
+        view._flow_reset()
+        assert view._flow_table.rowCount() == len(storage.flow_steps_defaults())
+
+    def test_round_trip_flow_steps_through_save(self, view):
+        view.load()
+        # add a wait step, then save and reload
+        view._flow_add_row()
+        view._save_all()
+        reloaded = storage.load_flow_steps()
+        # defaults(10) + 1 added
+        assert len(reloaded) == len(storage.flow_steps_defaults()) + 1
+        assert reloaded[-1]["action"] in storage.FLOW_ACTIONS
+
+    def test_disabled_step_persists(self, view):
+        from PyQt6.QtWidgets import QCheckBox
+        view.load()
+        wrap = view._flow_table.cellWidget(0, 6)
+        chk = wrap.findChild(QCheckBox)
+        chk.setChecked(False)
+        view._save_all()
+        reloaded = storage.load_flow_steps()
+        assert reloaded[0]["enabled"] is False
+
+    def test_selector_ref_choices_are_distinct_step_ids(self, view):
+        view.load()
+        choices = view._selector_ref_choices()
+        assert "search_icon" in choices
+        assert "post_link" in choices
+        assert len(choices) == len(set(choices))
+
+
+# ── P5: 설정 폴더 가져오기/내보내기 (storage 헬퍼 경로 주입) ──────────────────────
+
+
+class TestConfigShare:
+    def test_export_then_import_round_trip(self, view, tmp_path):
+        view.load()
+        view._save_all()
+        share = tmp_path / "share"
+        written = storage.export_config_to_dir(str(share))
+        assert "flow_steps.csv" in written
+        assert "selectors.csv" in written
+        # mutate flow then re-import from the exported folder
+        view._flow_reset()
+        view._flow_add_row()
+        view._save_all()
+        imported = storage.import_config_from_dir(str(share))
+        assert "flow_steps.csv" in imported
+        # reload reflects the imported (original) flow length
+        view.load()
+        assert view._flow_table.rowCount() == len(storage.flow_steps_defaults())
+
+    def test_import_empty_folder_returns_nothing(self, view, tmp_path):
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        imported = storage.import_config_from_dir(str(empty))
+        assert imported == []
