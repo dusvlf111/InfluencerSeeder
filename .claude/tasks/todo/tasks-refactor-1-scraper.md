@@ -74,7 +74,7 @@ core/
 
 ## 작업
 
-- [ ] R1.0 scraper 모듈화 + Flow 추상화 (전 범위)
+- [x] R1.0 scraper 모듈화 + Flow 추상화 (전 범위)
 
     - [x] R1.1 `scraper_parsing.py` 추출
         **작업 상세:** `_BLACKLISTED_PATHS`, `parse_followers`, `get_follower_count` 를 `core/scraper_parsing.py` 로 이동.
@@ -132,10 +132,10 @@ core/
         - [x] R1.5.T2 `pytest tests/ -v` 전체 통과(124 + 신규 flow 테스트). 실패 시 원인 수정.
         - [x] R1.5 커밋: `refactor(scraper): delegate run() to pluggable HashtagFlow`
 
-    - [ ] R1.6 정리 + 문서화
+    - [x] R1.6 정리 + 문서화
         **작업 상세:** `core/scraper.py` 에 남은 죽은 코드(이전된 `_step*` 잔재 등) 제거. 최종 `wc -l core/scraper.py core/scraper_driver.py core/scraper_parsing.py core/flows/*.py` 로 길이 확인(scraper.py 목표 ≤ ~450줄). `src/CLAUDE.md` 의 "디렉토리 구조"·"진행 중 작업" 절에 flows/ 추상화와 "새 플로우 추가법(= Flow 서브클래스 + register)"을 2~4줄 추가.
-        - [ ] R1.6.T1 `pytest tests/ -v` 최종 전체 통과. `cd src && .venv/bin/python -c "import core.scraper, core.flows"` 임포트 스모크.
-        - [ ] R1.6 커밋: `docs+refactor(scraper): cleanup + document flow extension point`
+        - [x] R1.6.T1 `pytest tests/ -v` 최종 전체 통과. `cd src && .venv/bin/python -c "import core.scraper, core.flows"` 임포트 스모크.
+        - [x] R1.6 커밋: `docs+refactor(scraper): cleanup + document flow extension point`
 
 ---
 

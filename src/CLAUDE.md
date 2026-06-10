@@ -22,7 +22,15 @@ src/
   main.py                  # 진입점: QApplication + 전역 스타일시트 + MainWindow
   core/
     storage.py             # 모든 파일 I/O (CSV) — DATA_DIR 기준
-    scraper.py             # ScraperThread(QThread) + Selenium 6-step 수집
+    scraper.py             # ScraperThread(QThread): 신호 + 역량 메서드 + run() (Flow 위임)
+    scraper_driver.py      # Chrome Options/stealth/init_driver (scraper.py 가 re-export)
+    scraper_parsing.py     # parse_followers / get_follower_count (scraper.py 가 re-export)
+    flows/                 # 수집 플로우 추상화 (Step/Flow + 레지스트리)
+      base.py              #   Outcome(enum) · Step(ABC) · Flow(ABC)
+      context.py           #   ScrapeContext(dataclass): thread/driver/루프 상태
+      steps.py             #   재사용 Step (6-step 파이프라인) — ctx.thread 역량 메서드만 호출
+      hashtag.py           #   HashtagFlow: 태그/게시물 루프 조립 (keyword 모드 별칭)
+      __init__.py          #   register(mode, cls) / get_flow(mode)
     sheets.py              # (v2 잔재, 비사용)
   ui/
     main_window.py         # MainWindow: 신호 배선·스크래퍼 생명주기
@@ -106,3 +114,23 @@ src/
 `.claude/tasks/prd-260610-3.md` (PRD) + `.claude/tasks/todo/tasks-prd-260610-3-push{1..4}.md` (작업 분해)에
 **재개(resume)·stealth·설정 5분리·플로우 최적화·영속 로깅** 증분이 정의되어 있다.
 구현 시 위 핵심 규칙(신호/스토리지/토큰/테스트 격리)을 그대로 따른다.
+
+### 새 수집 플로우 추가법 (flows/)
+
+`core/scraper.py:run()` 은 인프라(브라우저 기동·로그인 대기·seen 구성)만 담당하고, 수집 정책은
+`core.flows.get_flow(self.mode)` 로 받은 `Flow` 에 위임한다. **새 모드 추가 = `Flow` 서브클래스 + `register()`**:
+
+```python
+from core.flows.base import Flow
+from core.flows import register
+
+class ReelsFlow(Flow):
+    mode = "reels"
+    def run(self, ctx):
+        ...  # ctx.thread 의 역량 메서드 + steps.py Step 조립, ctx.driver 만 사용
+
+register("reels", ReelsFlow)   # 이제 ScraperThread(mode="reels", ...) 로 동작
+```
+
+⚠️ `core/scraper.py` 는 반드시 `.py` 모듈로 유지(패키지 금지 — `_passes_follower_filter` 의 patch 계약).
+저수준 "역량" 메서드는 `ScraperThread` 에, 오케스트레이션은 `flows/` 에 둔다. Step/Flow 도 UI 직접 조작 금지(`ctx.thread.<signal>.emit()` 만).
