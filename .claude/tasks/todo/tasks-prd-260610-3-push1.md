@@ -114,12 +114,12 @@
         - [x] 1.6.T1 pytest 테스트 (`class TestResultsDedup`): 신규 append True·파일 기록, 동일 username(대소문자 차이) 재append False, excluded 에 있는 username append False, `seen_usernames()` 가 results+excluded 합집합 소문자 반환.
         - [x] 1.6.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestResultsDedup -v` 실행 및 검증
 
-    - [ ] 1.7 state.json — `load_state()` / `save_state(dict)` / `clear_state()`
+    - [x] 1.7 state.json — `load_state()` / `save_state(dict)` / `clear_state()`
         **작업 상세:** §3.3 스키마. `import json`. `STATE_PATH = DATA_DIR / "state.json"` 은 함수 내에서 `DATA_DIR` 참조(테스트 monkeypatch 대응 — 모듈 상수로 캐시하지 말 것).
         `save_state(dict)`: `_ensure_data_dir()` 후 json dump(`ensure_ascii=False, indent=2`). `load_state() -> dict | None`: 없거나 손상 시 `None`. `clear_state()`: 파일 있으면 삭제(`Path.unlink(missing_ok=True)`).
         **참조:** PRD §3.3, §7 Resume
-        - [ ] 1.7.T1 pytest 테스트 (`class TestState`): 없을 때 load None, save→load round-trip, clear 후 load None, 손상 json load None, seen_usernames 리스트 보존.
-        - [ ] 1.7.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestState -v` 실행 및 검증
+        - [x] 1.7.T1 pytest 테스트 (`class TestState`): 없을 때 load None, save→load round-trip, clear 후 load None, 손상 json load None, seen_usernames 리스트 보존.
+        - [x] 1.7.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestState -v` 실행 및 검증
 
     - [ ] 1.8 전체 회귀 검증
         **작업 상세:** `cd src && .venv/bin/pytest tests/ -v` 실행. 기존 `test_scraper_utils.py` 가 깨지지 않는지 확인(이 Push 는 scraper 미수정). 기존 `test_storage.py` 의 stale 테스트(`max_scroll`, `sel_tab_recent` 등 현행 코드에 없는 키 참조)가 있으면 **현행 동작에 맞게 수정하거나 제거**하고 사유를 커밋 메시지에 기록.
