@@ -155,3 +155,47 @@ _RESULTS_FIELDNAMES = [
 ]
 
 _SELECTOR_FIELDNAMES = ["step_id", "step_name", "priority", "selector_type", "selector_value"]
+
+# ── Flow steps (260610-4) — 순서 있는 데이터 기반 액션 시퀀스 ────────────────────
+#
+# A flow is an ordered list of steps the engine interprets at run time. Each step
+# names an ``action`` (fixed vocabulary below), an optional ``selector_ref``
+# (a selectors.csv ``step_id`` whose priority chain locates the element), and an
+# optional ``param`` template (``#{keyword}`` / ``{tag_index}`` / ``{posts_per_tag}``
+# / a delay key). ``phase`` controls where the step runs in the tag/post loops.
+
+# Fixed action vocabulary (UI dropdown + load-time validation + flow registry).
+FLOW_ACTIONS: list[str] = [
+    "open_home",        # navigate to instagram home if not already there
+    "click",            # click the element resolved from selector_ref (coord fallback)
+    "type",             # human-type ``param`` into the resolved input
+    "click_index",      # click the Nth (param) matched element of selector_ref
+    "collect_open",     # collect post URLs (selector_ref) → drives the per_post loop
+    "peek_gate",        # early dedup gate (§6) — may SKIP_POST
+    "navigate_profile", # open the profile linked from the current post
+    "extract",          # extract profile fields into the result
+    "filter",           # apply target.csv follower-range filter — may SKIP_POST
+    "save",             # dedup + append result + emit signals + persist state
+    "go_back",          # return to the tag grid (or browser back)
+    "scroll",           # random scroll on the current page
+    "wait",             # random delay (param = delay key)
+]
+
+# phase: pre_loop (once per run) | per_tag (each tag) | per_post (each post).
+_FLOW_STEPS_FIELDNAMES = [
+    "order", "phase", "step_name", "action", "selector_ref", "param", "enabled",
+]
+
+# Default flow == the proven 6-step hashtag pipeline (behavior-preserving).
+_FLOW_STEPS_DEFAULTS: list[dict] = [
+    {"order": 1,  "phase": "per_tag",  "step_name": "돋보기 클릭",     "action": "click",            "selector_ref": "search_icon",  "param": "",                "enabled": True},
+    {"order": 2,  "phase": "per_tag",  "step_name": "검색 입력",       "action": "type",             "selector_ref": "search_input", "param": "#{keyword}",      "enabled": True},
+    {"order": 3,  "phase": "per_tag",  "step_name": "태그 클릭",       "action": "click_index",      "selector_ref": "tag_result",   "param": "{tag_index}",     "enabled": True},
+    {"order": 4,  "phase": "per_tag",  "step_name": "게시물 URL 수집", "action": "collect_open",     "selector_ref": "post_link",    "param": "{posts_per_tag}", "enabled": True},
+    {"order": 5,  "phase": "per_post", "step_name": "중복 조기판정",   "action": "peek_gate",        "selector_ref": "profile_link", "param": "",                "enabled": True},
+    {"order": 6,  "phase": "per_post", "step_name": "프로필 이동",     "action": "navigate_profile", "selector_ref": "profile_link", "param": "",                "enabled": True},
+    {"order": 7,  "phase": "per_post", "step_name": "정보 추출",       "action": "extract",          "selector_ref": "",             "param": "",                "enabled": True},
+    {"order": 8,  "phase": "per_post", "step_name": "필터",            "action": "filter",           "selector_ref": "",             "param": "",                "enabled": True},
+    {"order": 9,  "phase": "per_post", "step_name": "저장",            "action": "save",             "selector_ref": "",             "param": "",                "enabled": True},
+    {"order": 10, "phase": "per_post", "step_name": "뒤로가기",        "action": "go_back",          "selector_ref": "",             "param": "",                "enabled": True},
+]

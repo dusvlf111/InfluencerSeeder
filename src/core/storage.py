@@ -107,6 +107,17 @@ from core.storage_selectors import (  # noqa: E402
     selector_defaults, _normalize_selector_row, load_selectors, save_selectors,
 )
 
+# Flow steps (260610-4 — data-driven flow) + action vocabulary
+from core.storage_defaults import FLOW_ACTIONS  # noqa: E402,F401
+from core.storage_flowsteps import (  # noqa: E402
+    flow_steps_defaults, load_flow_steps, save_flow_steps,
+)
+
+# Folder-based config sharing (260610-4)
+from core.storage_share import (  # noqa: E402
+    CONFIG_FILES, export_config_to_dir, import_config_from_dir,
+)
+
 # Results / Excluded (§3.1 / §3.2)
 from core.storage_results import (  # noqa: E402
     load_excluded, save_excluded,
