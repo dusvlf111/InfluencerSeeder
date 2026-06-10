@@ -104,15 +104,15 @@
         - [x] 1.5.T1 pytest 테스트 (`class TestTarget`): defaults 반환·생성, round-trip, 누락 키 머지, 손상 파일 시 defaults.
         - [x] 1.5.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestTarget -v` 실행 및 검증
 
-    - [ ] 1.6 results.csv 프로필 스키마 + dedup append + `seen_usernames()`
+    - [x] 1.6 results.csv 프로필 스키마 + dedup append + `seen_usernames()`
         **작업 상세:** §3.1 로 `_RESULTS_FIELDNAMES` 교체:
         `["username","full_name","followers","following","posts_count","bio","website","is_private","profile_url","source_tag","source_post_url","collected_at"]`.
         `append_result(info) -> bool`: 저장 전 `username` 을 **소문자 정규화**, `results.csv` + `excluded.csv` 의 username 집합과 대조해 **중복이면 append 안 하고 False 반환**, 신규면 append 후 True. (기존 호출부 호환 위해 반환값 추가는 안전.)
         `seen_usernames() -> set[str]`: `load_results()` username ∪ `load_excluded()` 를 **소문자 정규화 set** 으로 반환.
         `load_results()` 는 유지(새 필드 자동 반영). 하위호환: 옛 컬럼(`post_url`) 데이터가 있어도 깨지지 않게 `DictReader` 그대로.
         **참조:** PRD §3.1, 이미지 `6_프로필 이미지에서 정보 저장.png`, `src/core/storage.py` (append_result)
-        - [ ] 1.6.T1 pytest 테스트 (`class TestResultsDedup`): 신규 append True·파일 기록, 동일 username(대소문자 차이) 재append False, excluded 에 있는 username append False, `seen_usernames()` 가 results+excluded 합집합 소문자 반환.
-        - [ ] 1.6.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestResultsDedup -v` 실행 및 검증
+        - [x] 1.6.T1 pytest 테스트 (`class TestResultsDedup`): 신규 append True·파일 기록, 동일 username(대소문자 차이) 재append False, excluded 에 있는 username append False, `seen_usernames()` 가 results+excluded 합집합 소문자 반환.
+        - [x] 1.6.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestResultsDedup -v` 실행 및 검증
 
     - [ ] 1.7 state.json — `load_state()` / `save_state(dict)` / `clear_state()`
         **작업 상세:** §3.3 스키마. `import json`. `STATE_PATH = DATA_DIR / "state.json"` 은 함수 내에서 `DATA_DIR` 참조(테스트 monkeypatch 대응 — 모듈 상수로 캐시하지 말 것).
