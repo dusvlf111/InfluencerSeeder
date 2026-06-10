@@ -42,6 +42,14 @@ def _build_chrome_options(web: dict | None = None):
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
+    # Renderer 안정화 — "Timed out receiving message from renderer" 완화.
+    # Instagram 은 백그라운드 요청이 끊이지 않아 'normal' 로드 전략에선
+    # driver.get() 이 완료를 못 받고 렌더러 타임아웃이 난다. 'eager' 는 DOM
+    # 준비(DOMContentLoaded) 시점에 반환하므로 이를 피한다.
+    options.page_load_strategy = "eager"
+    options.add_argument("--disable-dev-shm-usage")  # /dev/shm 고갈로 인한 렌더러 크래시 방지
+    options.add_argument("--disable-gpu")            # GPU 프로세스發 렌더러 행 방지
+
     if _truthy(web.get("headless")):
         options.add_argument("--headless=new")
 

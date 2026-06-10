@@ -17,24 +17,30 @@ _MOBILE_UA = (
 )
 _HOME_URL = "https://www.instagram.com/"
 
-# 임베디드 웹뷰 고정 크기 — iPhone 12 Pro 논리 해상도(390 x 844, portrait).
+# 임베디드 웹뷰 — iPhone 12 논리 해상도(390 x 844, portrait)를 75% 비율로 임베딩.
 # 프로그램 창이 아니라 "인스타 웹이 렌더되는 뷰포트"를 휴대폰 크기로 고정한다.
+# zoom 0.75 + 위젯크기=폰크기*0.75 → 페이지는 iPhone 12 폭(390 CSS px)으로
+# 레이아웃되고 화면에는 75% 크기로 표시된다.
 _IPHONE_W = 390
 _IPHONE_H = 844
+_EMBED_SCALE = 0.75
+_EMBED_W = round(_IPHONE_W * _EMBED_SCALE)   # 293
+_EMBED_H = round(_IPHONE_H * _EMBED_SCALE)   # 633
 
 
 class BrowserPanel(QWebEngineView):
     """모바일 Instagram 임베디드 뷰 + 영속 세션.
 
-    뷰 위젯 자체를 iPhone 12 Pro 크기(390 x 844)로 고정해 인스타 웹이 세로형
-    휴대폰 뷰포트로 렌더되게 한다(프로그램 창 크기와 무관).
+    iPhone 12(390 x 844) 레이아웃을 75% 비율로 임베딩한다 — 뷰 위젯은 75% 크기
+    (293 x 633)로 고정하고 zoomFactor 0.75 를 적용(프로그램 창 크기와 무관).
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # 인스타 웹 뷰포트를 아이폰 크기로 고정(리사이즈해도 폰 크기 유지).
-        self.setFixedSize(_IPHONE_W, _IPHONE_H)
+        # 인스타 웹 뷰포트를 아이폰 12 의 75% 크기로 고정.
+        self.setFixedSize(_EMBED_W, _EMBED_H)
+        self.setZoomFactor(_EMBED_SCALE)
 
         # 영속 프로파일 — data/browser_profile/ 에 쿠키/세션 저장
         profile_dir = str(storage.DATA_DIR / "browser_profile")
