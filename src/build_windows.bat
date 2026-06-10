@@ -85,21 +85,17 @@ if exist "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND
 
 if defined CHROME_FOUND (
     echo       Found Google Chrome.
-) else (
-    echo       Chrome not found. Installing via winget...
-    winget --version > nul 2>&1
-    if errorlevel 1 (
-        echo [WARN] winget unavailable. Install Chrome manually from
-        echo        https://www.google.com/chrome/  ^(required to run the app^).
-    ) else (
-        winget install Google.Chrome --silent --accept-package-agreements --accept-source-agreements
-        if errorlevel 1 (
-            echo [WARN] Chrome install failed. Install manually from https://www.google.com/chrome/
-        ) else (
-            echo       Chrome installed.
-        )
-    )
+    goto :CHROME_OK
 )
+echo       Chrome not found. Installing via winget...
+winget --version > nul 2>&1
+if errorlevel 1 (
+    echo [WARN] winget unavailable. Install Chrome from https://www.google.com/chrome/
+    goto :CHROME_OK
+)
+winget install Google.Chrome --silent --accept-package-agreements --accept-source-agreements
+if errorlevel 1 echo [WARN] Chrome install failed. Install from https://www.google.com/chrome/
+:CHROME_OK
 
 :: -------------------------------------------------------
 :: Step 2: Create virtual environment
@@ -152,7 +148,12 @@ echo.
 
 if exist "build_tmp" rmdir /s /q build_tmp
 
-%VENV_PY% -m PyInstaller build.spec --distpath dist --workpath build_tmp --noconfirm
+:: Output the app next to src\ (project root), not inside a dist\ subfolder.
+pushd "%~dp0.."
+set "OUT_DIR=%CD%"
+popd
+
+%VENV_PY% -m PyInstaller build.spec --distpath "%OUT_DIR%" --workpath build_tmp --noconfirm
 if errorlevel 1 (
     echo.
     echo [ERROR] Build failed. See output above for details.
@@ -169,16 +170,16 @@ echo.
 echo ============================================================
 echo.
 
-set EXE_FILE=
-for %%f in (dist\*.exe) do set EXE_FILE=%%f
+set "EXE_FILE="
+for %%f in ("%OUT_DIR%\*.exe") do set "EXE_FILE=%%~ff"
 
 if defined EXE_FILE (
-    echo   Output : %CD%\!EXE_FILE!
+    echo   Output : !EXE_FILE!
     echo.
     echo   To run : Double-click  !EXE_FILE!
 ) else (
-    echo   Output : dist\ folder
-    echo   To run : Double-click the .exe inside dist\
+    echo   Output : %OUT_DIR%
+    echo   To run : Double-click the .exe in that folder
 )
 
 echo.
@@ -188,8 +189,7 @@ echo.
 set /p SHORTCUT_CHOICE="Create desktop shortcut? [y/N]: "
 if /i "!SHORTCUT_CHOICE!"=="y" (
     if defined EXE_FILE (
-        set "FULL_EXE=%CD%\!EXE_FILE!"
-        powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%USERPROFILE%\Desktop\InfluencerSeeder.lnk'); $s.TargetPath = '!FULL_EXE!'; $s.WorkingDirectory = '%CD%'; $s.Description = 'InfluencerSeeder'; $s.Save()"
+        powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%USERPROFILE%\Desktop\InfluencerSeeder.lnk'); $s.TargetPath = '!EXE_FILE!'; $s.WorkingDirectory = '%OUT_DIR%'; $s.Description = 'InfluencerSeeder'; $s.Save()"
         echo Desktop shortcut created.
     )
 )

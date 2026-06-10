@@ -41,15 +41,15 @@ set "CHROME_FOUND="
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
 if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
 if exist "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
-if not defined CHROME_FOUND (
-    echo       Chrome not found. Installing via winget...
-    winget --version > nul 2>&1
-    if errorlevel 1 (
-        echo [WARN] winget unavailable. Install Chrome from https://www.google.com/chrome/
-    ) else (
-        winget install Google.Chrome --silent --accept-package-agreements --accept-source-agreements > nul 2>&1
-    )
+if defined CHROME_FOUND goto :CHROME_OK
+echo       Chrome not found. Installing via winget...
+winget --version > nul 2>&1
+if errorlevel 1 (
+    echo [WARN] winget unavailable. Install Chrome from https://www.google.com/chrome/
+    goto :CHROME_OK
 )
+winget install Google.Chrome --silent --accept-package-agreements --accept-source-agreements > nul 2>&1
+:CHROME_OK
 
 :: ----- Step 2: Virtual environment + dependencies -----
 :: Reuse the same venv as build_windows.bat (skips fast if it already exists).

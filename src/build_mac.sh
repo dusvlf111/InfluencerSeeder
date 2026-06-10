@@ -154,9 +154,12 @@ echo ""
 
 rm -rf build_tmp
 
+# Output the .app/.dmg next to src/ (project root), not inside a dist/ subfolder.
+OUT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 _start_spinner "Running PyInstaller"
 $VENV_PY -m PyInstaller build.spec \
-    --distpath dist \
+    --distpath "$OUT_DIR" \
     --workpath build_tmp \
     --noconfirm \
     > /tmp/pyinstaller.log 2>&1 || {
@@ -168,13 +171,13 @@ $VENV_PY -m PyInstaller build.spec \
 _stop_spinner
 
 APP_PATH=""
-for f in dist/*.app; do
+for f in "$OUT_DIR"/*.app; do
     [ -d "$f" ] && APP_PATH="$f" && break
 done
 
 if [ -z "$APP_PATH" ]; then
-    echo "[ERROR] No .app found in dist/"
-    ls -la dist/ 2>/dev/null || true
+    echo "[ERROR] No .app found in $OUT_DIR"
+    ls -la "$OUT_DIR" 2>/dev/null || true
     exit 1
 fi
 APP_NAME="$(basename "$APP_PATH")"
@@ -192,7 +195,7 @@ hdiutil create \
     -srcfolder "$APP_PATH" \
     -ov \
     -format UDZO \
-    "dist/$DMG_NAME" \
+    "$OUT_DIR/$DMG_NAME" \
     >> /tmp/pyinstaller.log 2>&1 && _stop_spinner || {
     _stop_spinner
     echo "      (DMG skipped - .app can be distributed directly)"
@@ -204,9 +207,9 @@ echo ""
 echo "============================================================"
 echo "  Build complete!"
 echo ""
-echo "  App    : $SCRIPT_DIR/$APP_PATH"
+echo "  App    : $APP_PATH"
 if [ -n "$DMG_NAME" ]; then
-    echo "  DMG    : $SCRIPT_DIR/dist/$DMG_NAME  (share this)"
+    echo "  DMG    : $OUT_DIR/$DMG_NAME  (share this)"
 fi
 echo ""
 echo "  To run :"
@@ -218,15 +221,15 @@ echo "    open \"$APP_PATH\""
 echo "============================================================"
 echo ""
 
-read -r -p "Open dist/ in Finder? [y/N]: " OPEN_CHOICE
+read -r -p "Open output folder in Finder? [y/N]: " OPEN_CHOICE
 if [[ "${OPEN_CHOICE,,}" == "y" ]]; then
-    open dist/
+    open "$OUT_DIR"
 fi
 
 read -r -p "Create desktop shortcut (.command)? [y/N]: " SHORTCUT_CHOICE
 if [[ "${SHORTCUT_CHOICE,,}" == "y" ]]; then
     SHORTCUT="$HOME/Desktop/InfluencerSeeder.command"
-    printf '#!/bin/bash\nopen "%s/%s"\n' "$(pwd)" "$APP_PATH" > "$SHORTCUT"
+    printf '#!/bin/bash\nopen "%s"\n' "$APP_PATH" > "$SHORTCUT"
     chmod +x "$SHORTCUT"
     xattr -d com.apple.quarantine "$SHORTCUT" 2>/dev/null || true
     echo "Shortcut created: $SHORTCUT"

@@ -11,4 +11,12 @@ src/data/
 src/build_tmp/
 src/dist/
 src/build/
+# build output (project root — next to src/)
+/InfluencerSeeder
+/InfluencerSeeder.exe
+/InfluencerSeeder.app/
+/InfluencerSeeder.dmg
+/인플루언서시딩기
+/인플루언서시딩기.exe
+/인플루언서시딩기.app/
 .claude/.task-running
