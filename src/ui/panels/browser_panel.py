@@ -5,12 +5,23 @@ QWebEngineView + 영속 프로파일로 로그인 세션 보존.
 쿠키는 cookieAdded 신호로 수집 -> Selenium 쿠키 주입에 사용.
 """
 from PyQt6.QtCore import QUrl
+from PyQt6.QtWidgets import QMenu, QMessageBox
 from PyQt6.QtWebEngineCore import (
     QWebEngineProfile, QWebEnginePage, QWebEngineSettings,
 )
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 
 import core.storage as storage
+
+# 우클릭 좌표 등록 메뉴에 노출할 플로우 스텝(step_id, 라벨).
+_COORD_STEPS = [
+    ("search_icon",   "검색/탐색 아이콘"),
+    ("search_input",  "검색어 입력창"),
+    ("tag_result",    "태그 검색결과"),
+    ("post_link",     "게시물(이미지)"),
+    ("profile_link",  "프로필 이름/링크"),
+    ("back_button",   "뒤로가기 버튼"),
+]
 
 _MOBILE_UA = (
     "Mozilla/5.0 (Linux; Android 13; Pixel 7) "
@@ -149,3 +160,51 @@ class BrowserPanel(QWebEngineView):
     def navigate_home(self):
         """Instagram 홈으로 이동 (스크래핑 시작 전 초기화용)."""
         self.load(QUrl(_HOME_URL))
+
+    # ── 우클릭 → 좌표 등록 ───────────────────────────────────────────────────────
+
+    def contextMenuEvent(self, event):
+        """우클릭 위치를 특정 스텝의 coord 후보로 등록하는 메뉴를 띄운다.
+
+        뷰는 zoom 0.75 로 렌더되므로 위젯 픽셀을 CSS 좌표(= elementFromPoint 가
+        쓰는 좌표계)로 환산해 저장한다. 같은 임베디드 브라우저에서 클릭하므로
+        좌표계가 일치한다."""
+        pos = event.pos()
+        css_x = round(pos.x() / _EMBED_SCALE)
+        css_y = round(pos.y() / _EMBED_SCALE)
+
+        menu = QMenu(self)
+        sub = menu.addMenu(f"좌표 등록  ({css_x}, {css_y})")
+        for step_id, label in _COORD_STEPS:
+            act = sub.addAction(f"{label}  [{step_id}]")
+            act.triggered.connect(
+                lambda _checked=False, s=step_id, x=css_x, y=css_y:
+                self._register_coord(s, x, y)
+            )
+        menu.exec(event.globalPos())
+
+    def _register_coord(self, step_id: str, x: int, y: int):
+        """선택한 스텝의 셀렉터 후보 맨 끝에 coord(x,y) 를 추가 저장한다."""
+        try:
+            rows = storage.load_selectors()
+            # 같은 step_id 의 현재 최대 priority 다음 순번.
+            prios = [r.get("priority", 0) for r in rows
+                     if (r.get("step_id") or "") == step_id
+                     and isinstance(r.get("priority"), int)]
+            next_prio = (max(prios) + 1) if prios else 1
+            name = next((lbl for sid, lbl in _COORD_STEPS if sid == step_id), step_id)
+            rows.append({
+                "step_id": step_id,
+                "step_name": name,
+                "priority": next_prio,
+                "selector_type": "coord",
+                "selector_value": f"{x},{y}",
+            })
+            storage.save_selectors(rows)
+            QMessageBox.information(
+                self, "좌표 등록됨",
+                f"[{step_id}] 후보에 좌표 ({x}, {y}) 를 추가했습니다.\n"
+                f"수집 시 셀렉터가 실패하면 이 좌표로 클릭합니다.",
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "좌표 등록 실패", str(exc))

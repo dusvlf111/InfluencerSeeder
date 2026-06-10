@@ -169,7 +169,13 @@ class MainWindow(QMainWindow):
             self._run_logger = None
 
         full = self._build_params(params, resume_state)
-        self._scraper = ScraperThread(**full)
+        # 임베디드 브라우저가 있으면 별도 Selenium Chrome 대신 그 안에서 직접 수집
+        # (클릭 방식, URL 이동 X). 없으면 기존 Selenium ScraperThread 로 폴백.
+        if self._browser is not None:
+            from core.embedded_scraper import EmbeddedScraper
+            self._scraper = EmbeddedScraper(self._browser, **full)
+        else:
+            self._scraper = ScraperThread(**full)
         self._scraper.log_signal.connect(self._results.append_log)
         self._scraper.log_signal.connect(self._log_to_file)
         self._scraper.step_signal.connect(self._on_step)
