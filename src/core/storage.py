@@ -119,7 +119,8 @@ from core.storage_flowsteps import (  # noqa: E402
 
 # Folder-based config sharing (260610-4)
 from core.storage_share import (  # noqa: E402
-    CONFIG_FILES, export_config_to_dir, import_config_from_dir,
+    CONFIG_FILES, DATA_FILES, SHAREABLE_FILES, SHAREABLE_LABELS,
+    export_config_to_dir, import_config_from_dir,
     export_config_to_zip, import_config_from_zip,
 )
 

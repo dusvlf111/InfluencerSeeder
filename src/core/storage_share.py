@@ -28,11 +28,40 @@ _CONFIG_LOADERS: dict[str, str | None] = {
     "flow_steps.csv": "load_flow_steps",
     "selectors.csv":  "load_selectors",
     "target.csv":     "load_target",
+    "fields.csv":     "load_fields",
     "excluded.csv":   None,
+    # Collected data (Fix-2 D): exported only when it exists (no loader).
+    "results.csv":    None,
 }
 
 # Public, stable order for UI checklists and iteration.
-CONFIG_FILES: list[str] = list(_CONFIG_LOADERS.keys())
+CONFIG_FILES: list[str] = [
+    "settings.csv", "web.csv", "delays.csv", "flow.csv", "flow_steps.csv",
+    "selectors.csv", "target.csv", "fields.csv", "excluded.csv",
+]
+
+# Collected-data files (not "config" but shareable as a bundle, Fix-2 D).
+DATA_FILES: list[str] = ["results.csv"]
+
+# Everything the export/import bundle can carry (config + data), de-duplicated
+# while preserving order.
+SHAREABLE_FILES: list[str] = CONFIG_FILES + [
+    f for f in DATA_FILES if f not in CONFIG_FILES
+]
+
+# Korean labels for the export checklist UI.
+SHAREABLE_LABELS: dict[str, str] = {
+    "settings.csv":   "기본 설정",
+    "web.csv":        "웹 설정",
+    "delays.csv":     "딜레이 설정",
+    "flow.csv":       "플로우 설정",
+    "flow_steps.csv": "플로우 단계",
+    "selectors.csv":  "버튼매핑",
+    "target.csv":     "타겟 설정",
+    "fields.csv":     "수집 항목",
+    "excluded.csv":   "제외 명단",
+    "results.csv":    "수집 데이터",
+}
 
 
 def _looks_like_csv(path: Path) -> bool:
@@ -103,11 +132,13 @@ def export_config_to_zip(zip_path, names: list[str] | None = None) -> list[str]:
     """Bundle the requested config CSVs into a single ``.zip`` at ``zip_path``.
 
     Same materialization rules as :func:`export_config_to_dir` (files written on
-    load are created first; ``excluded.csv`` only if it exists). Each CSV is
-    stored flat under its standard filename. Returns the filenames bundled.
+    load are created first; ``excluded.csv`` / ``results.csv`` only if they
+    exist). Each CSV is stored flat under its standard filename. ``names``
+    defaults to all of ``SHAREABLE_FILES`` (config + collected data). Returns the
+    filenames bundled.
     """
     from core import storage as _st
-    targets = names if names is not None else CONFIG_FILES
+    targets = names if names is not None else SHAREABLE_FILES
     zp = Path(zip_path)
     if zp.parent and not zp.parent.exists():
         zp.parent.mkdir(parents=True, exist_ok=True)
@@ -131,11 +162,12 @@ def export_config_to_zip(zip_path, names: list[str] | None = None) -> list[str]:
 
 
 def import_config_from_zip(zip_path) -> list[str]:
-    """Apply standard config CSVs found inside a ``.zip`` into ``DATA_DIR``.
+    """Apply standard shareable CSVs found inside a ``.zip`` into ``DATA_DIR``.
 
-    Matches members by basename (tolerates flat or nested archives). Unknown /
-    unreadable / non-CSV members are skipped (never raised). Returns the list of
-    filenames actually imported.
+    Matches members by basename (tolerates flat or nested archives) against
+    ``SHAREABLE_FILES`` (config + collected data, e.g. ``results.csv``). Unknown
+    / unreadable / non-CSV members are skipped (never raised). Returns the list
+    of filenames actually imported.
     """
     from core import storage as _st
     imported: list[str] = []
@@ -148,7 +180,7 @@ def import_config_from_zip(zip_path) -> list[str]:
         by_base: dict[str, str] = {}
         for member in zf.namelist():
             by_base.setdefault(Path(member).name, member)
-        for name in CONFIG_FILES:
+        for name in SHAREABLE_FILES:
             member = by_base.get(name)
             if member is None:
                 continue

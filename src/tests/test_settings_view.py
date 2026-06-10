@@ -443,3 +443,87 @@ class TestConfigShare:
 
     def test_import_missing_zip_returns_nothing(self, tmp_path):
         assert storage.import_config_from_zip(str(tmp_path / "nope.zip")) == []
+
+
+# ── Fix-2 D: zip 전용 + 항목 선택 공유 (설정 + 제외 + 수집데이터) ─────────────────
+
+
+class TestShareableZip:
+    def test_results_and_fields_round_trip(self, view, tmp_path):
+        view.load()
+        view._save_all()
+        # collected data + a couple of excluded accounts
+        storage.append_result({"username": "alice", "followers": "100"})
+        storage.save_excluded(["spammer"])
+        zip_path = tmp_path / "bundle.zip"
+        written = storage.export_config_to_zip(str(zip_path))
+        assert "results.csv" in written
+        assert "fields.csv" in written
+        assert "excluded.csv" in written
+        # wipe + re-import → data restored.
+        (tmp_path / "results.csv").unlink()
+        assert storage.load_results() == []
+        imported = storage.import_config_from_zip(str(zip_path))
+        assert "results.csv" in imported
+        rows = storage.load_results()
+        assert any(r["username"] == "alice" for r in rows)
+
+    def test_export_only_selected_names(self, view, tmp_path):
+        view.load()
+        view._save_all()
+        storage.append_result({"username": "bob", "followers": "5"})
+        zip_path = tmp_path / "sel.zip"
+        written = storage.export_config_to_zip(
+            str(zip_path), names=["selectors.csv", "fields.csv"])
+        assert set(written) == {"selectors.csv", "fields.csv"}
+        assert "results.csv" not in written
+
+    def test_results_excluded_when_absent(self, view, tmp_path):
+        view.load()
+        view._save_all()  # no results.csv written
+        zip_path = tmp_path / "noresults.zip"
+        written = storage.export_config_to_zip(str(zip_path))
+        assert "results.csv" not in written
+        assert "selectors.csv" in written
+
+    def test_shareable_files_includes_data_and_config(self):
+        assert "results.csv" in storage.SHAREABLE_FILES
+        assert "fields.csv" in storage.SHAREABLE_FILES
+        assert "excluded.csv" in storage.SHAREABLE_FILES
+        # no duplicates
+        assert len(storage.SHAREABLE_FILES) == len(set(storage.SHAREABLE_FILES))
+
+
+class TestExportSelectDialog:
+    def test_selected_names_reflects_existing_files(self, view, tmp_path, qapp):
+        from ui.dialogs.export_select_dialog import ExportSelectDialog
+        view.load()
+        view._save_all()  # materializes config CSVs (no results.csv)
+        dlg = ExportSelectDialog()
+        names = dlg.selected_names()
+        # config files exist and are pre-checked; results.csv absent → unchecked.
+        assert "selectors.csv" in names
+        assert "fields.csv" in names
+        assert "results.csv" not in names
+        dlg.close()
+
+    def test_select_none_then_all(self, view, tmp_path, qapp):
+        from ui.dialogs.export_select_dialog import ExportSelectDialog
+        view.load()
+        view._save_all()
+        dlg = ExportSelectDialog()
+        dlg._set_all(False)
+        assert dlg.selected_names() == []
+        dlg._set_all(True)
+        # only existing files become checked
+        assert "selectors.csv" in dlg.selected_names()
+        dlg.close()
+
+    def test_results_checkbox_enabled_when_present(self, view, tmp_path, qapp):
+        from ui.dialogs.export_select_dialog import ExportSelectDialog
+        view.load()
+        view._save_all()
+        storage.append_result({"username": "carol", "followers": "9"})
+        dlg = ExportSelectDialog()
+        assert "results.csv" in dlg.selected_names()
+        dlg.close()
