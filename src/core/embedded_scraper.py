@@ -83,6 +83,20 @@ def build_count_js(candidates: list[dict]) -> str:
     return _COUNT_FN + f"return __count({payload});}})()"
 
 
+def build_rect_js(candidates: list[dict]) -> str:
+    """첫 매칭 요소를 화면 안으로 스크롤한 뒤 중심 좌표(CSS) {x,y} 반환(없으면 null).
+    실제 Qt 마우스 클릭(real_click_css)에 넘길 좌표를 얻는 데 쓴다."""
+    payload = json.dumps(candidates, ensure_ascii=False)
+    return _FIND_FN + f"""
+        var el = __findFirst({payload});
+        if (!el) return null;
+        try {{ el.scrollIntoView({{block: 'center', inline: 'center'}}); }} catch (e) {{}}
+        var r = el.getBoundingClientRect();
+        if (!r || (r.width === 0 && r.height === 0)) return null;
+        return {{x: r.left + r.width / 2, y: r.top + r.height / 2}};
+    }})()"""
+
+
 def dismiss_popup_js() -> str:
     labels = json.dumps(_DISMISS_LABELS, ensure_ascii=False)
     return f"""(function(){{
@@ -455,6 +469,43 @@ class EmbeddedScraper(QObject):
     def _sleep(self, ms, fn):
         QTimer.singleShot(int(ms), lambda: fn() if self._running else None)
 
+    def _real_click_ready(self, step_id, cb):
+        """요소가 나타날 때까지 기다린 뒤, **실제 Qt 마우스 클릭**(isTrusted)으로
+        클릭한다. JS 합성 클릭이 안 먹는 검색창 등에 사용. real_click 미지원 시
+        일반 _click_ready 로 폴백. cb(success)."""
+        browser = self._browser
+        if not hasattr(browser, "real_click_css"):
+            return self._click_ready(step_id, cb)
+        cands = self._cands(step_id)
+        if not cands:
+            self._log(f"  [ERROR] {step_id} 후보 없음")
+            return cb(False)
+
+        def attempt(left):
+            self._js(build_count_js(cands), lambda n: on_count(int(n or 0), left))
+
+        def on_count(n, left):
+            if n > 0:
+                self._js(build_rect_js(cands), on_rect)
+            elif left > 0 and self._running:
+                self._log(f"  [wait/{step_id}] 로딩 대기... ({self._WAIT_TRIES - left + 1}/{self._WAIT_TRIES})")
+                self._sleep(self._WAIT_MS, lambda: attempt(left - 1))
+            else:
+                self._log(f"  [ERROR] [{step_id}] 요소 없음(대기 초과)")
+                cb(False)
+
+        def on_rect(rect):
+            if isinstance(rect, dict) and rect.get("x") is not None:
+                try:
+                    self._browser.real_click_css(rect["x"], rect["y"])
+                    self._log(f"  [realclick/{step_id}] ({rect['x']:.0f},{rect['y']:.0f}) 실제 클릭")
+                    return cb(True)
+                except Exception as exc:
+                    self._log(f"  [realclick-err] {exc}")
+            cb(False)
+
+        attempt(self._WAIT_TRIES)
+
     def _click_ready(self, step_id, cb):
         """후보 요소가 나타날 때까지 기다렸다 클릭. coord 후보가 있으면 끝까지
         못 찾아도 좌표 클릭을 시도한다. cb(success)."""
@@ -548,7 +599,7 @@ class EmbeddedScraper(QObject):
         self._cur_keyword = self._keywords[self._kw_idx]
         self._kw_idx += 1
         self._step(f"검색 아이콘 클릭 (키워드 {self._kw_idx}/{len(self._keywords)})")
-        self._dismiss(lambda: self._click_ready("search_icon", self._after_search_icon))
+        self._dismiss(lambda: self._real_click_ready("search_icon", self._after_search_icon))
 
     def _after_search_icon(self, ok):
         if not ok:
@@ -560,10 +611,10 @@ class EmbeddedScraper(QObject):
 
     def _click_search_box(self):
         self._step("검색창 클릭(활성화)")
-        # 전용 스텝 'search_box' 후보로 클릭(설정/우클릭 좌표로 지정 가능).
-        # 후보가 없으면 검색 입력창(search_input) 으로 폴백.
+        # 검색창은 JS 합성 클릭이 안 먹어(isTrusted=false) → 실제 Qt 마우스 클릭.
+        # 전용 스텝 'search_box' 후보(없으면 search_input) 위치에 실제 클릭.
         step = "search_box" if self._cands("search_box") else "search_input"
-        self._click_ready(step, self._after_click_box)
+        self._real_click_ready(step, self._after_click_box)
 
     def _after_click_box(self, ok):
         if not ok:

@@ -4,8 +4,9 @@ QWebEngineView + 영속 프로파일로 로그인 세션 보존.
 모바일 UA를 사용해 Instagram 모바일 버전을 렌더링.
 쿠키는 cookieAdded 신호로 수집 -> Selenium 쿠키 주입에 사용.
 """
-from PyQt6.QtCore import QUrl
-from PyQt6.QtWidgets import QMenu, QMessageBox
+from PyQt6.QtCore import QUrl, QPoint, QPointF, QEvent, Qt
+from PyQt6.QtGui import QMouseEvent
+from PyQt6.QtWidgets import QMenu, QMessageBox, QApplication
 from PyQt6.QtWebEngineCore import (
     QWebEngineProfile, QWebEnginePage, QWebEngineSettings,
 )
@@ -162,6 +163,32 @@ class BrowserPanel(QWebEngineView):
     def navigate_home(self):
         """Instagram 홈으로 이동 (스크래핑 시작 전 초기화용)."""
         self.load(QUrl(_HOME_URL))
+
+    # ── 진짜(trusted) 마우스 클릭 ────────────────────────────────────────────────
+
+    def real_click_css(self, css_x, css_y) -> bool:
+        """CSS 좌표(페이지 기준)에 **실제 Qt 마우스 이벤트**를 보낸다.
+
+        JS 의 element.click()/dispatchEvent 는 isTrusted=false 라 인스타 검색
+        포커스 등이 무시될 수 있다. QWebEngineView 의 내부 렌더 위젯(focusProxy)
+        에 QMouseEvent(press/release)를 직접 전달하면 isTrusted=true 인 진짜
+        클릭이 되어 정상 동작한다. zoom 0.75 라 CSS→위젯 픽셀 환산이 필요."""
+        try:
+            wx = float(css_x) * _EMBED_SCALE
+            wy = float(css_y) * _EMBED_SCALE
+        except (TypeError, ValueError):
+            return False
+        target = self.focusProxy() or self
+        lp = QPointF(wx, wy)
+        gp = QPointF(target.mapToGlobal(QPoint(int(wx), int(wy))))
+        for etype in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease):
+            ev = QMouseEvent(
+                etype, lp, gp,
+                Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier,
+            )
+            QApplication.sendEvent(target, ev)
+        return True
 
     # ── 우클릭 → 좌표 등록 ───────────────────────────────────────────────────────
 
