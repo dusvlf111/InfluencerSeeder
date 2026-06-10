@@ -205,6 +205,12 @@ class ScraperThread(QThread):
         excluded_set: set,
         selectors=None,
         app_settings: dict | None = None,
+        *,
+        web: dict | None = None,
+        delays: dict | None = None,
+        flow: dict | None = None,
+        target: dict | None = None,
+        resume_state: dict | None = None,
     ):
         super().__init__()
         self.mode          = mode
@@ -214,21 +220,64 @@ class ScraperThread(QThread):
         self.max_followers = max_followers
         self.excluded_set  = excluded_set
 
+        from core import storage
+
+        # ── v3 config groups (self-load when not injected, §9) ──────────────────
+        self._web    = web    if web    is not None else storage.load_web()
+        self._delays = delays if delays is not None else storage.load_delays()
+        self._flow   = flow   if flow   is not None else storage.load_flow()
+        self._target = target if target is not None else storage.load_target()
+
         # Build step_id → row dict from selectors (list of dicts or None)
-        from core.storage import load_selectors
-        rows = load_selectors()
+        rows = storage.load_selectors()
         if isinstance(selectors, list) and selectors:
             rows = selectors
         # Last-wins dict for backward-compat _get_by (single selector per step).
-        default_rows = {r["step_id"]: r for r in rows}
-        self._selectors = default_rows
+        self._selectors = {r["step_id"]: r for r in rows}
         # Priority fallback chains: step_id -> [row, ...] sorted by priority asc.
         self._selector_chains = self._build_selector_chains(rows)
 
         _s = app_settings or {}
-        self.posts_per_tag = int(_s.get("posts_per_tag", 5))
-        self.max_tags      = int(_s.get("max_tags", 3))
         self._app_settings = _s
+
+        # ── Flow knobs (§2.4) — app_settings overrides flow.csv when present ────
+        def _flow_int(key, default):
+            if key in _s:
+                return int(_s.get(key))
+            return int(self._flow.get(key, default))
+
+        self.max_tags            = _flow_int("max_tags", 3)
+        self.posts_per_tag       = _flow_int("posts_per_tag", 5)
+        self.scroll_max_attempts = _flow_int("scroll_max_attempts", 15)
+        self.tag_start_index     = _flow_int("tag_start_index", 0)
+        self.stop_on_consecutive_miss = _flow_int("stop_on_consecutive_miss", 10)
+        self.skip_visited_profile = _truthy(self._flow.get("skip_visited_profile", "true"))
+
+        # ── Target filters (§2.5) — fall back to legacy min/max_followers ───────
+        def _tgt_int(key, default):
+            return int(self._target.get(key, default) or 0)
+
+        self.min_following = _tgt_int("min_following", 0)
+        self.max_following = _tgt_int("max_following", 0)
+        self.min_posts     = _tgt_int("min_posts", 0)
+        # min/max_followers already passed positionally; prefer non-zero target.
+        if self.min_followers == 0:
+            self.min_followers = _tgt_int("min_followers", 0)
+        if self.max_followers == 0:
+            self.max_followers = _tgt_int("max_followers", 0)
+
+        # ── Resume state (§3.3 / §7) ────────────────────────────────────────────
+        self._resume_state = resume_state
+        self._start_tag_index  = self.tag_start_index
+        self._start_post_index = 0
+        self._collected        = 0
+        self._seen: set[str]   = set()
+        if resume_state:
+            self._start_tag_index  = int(resume_state.get("tag_index", self.tag_start_index))
+            self._start_post_index = int(resume_state.get("post_index", 0))
+            self._collected        = int(resume_state.get("collected_count", 0))
+            for u in resume_state.get("seen_usernames", []) or []:
+                self._seen.add(self._norm_username(u))
 
         self._waiting_login = False
         self._stop          = False
@@ -254,8 +303,13 @@ class ScraperThread(QThread):
     # ── Delays ────────────────────────────────────────────────────────────────
 
     def _random_delay(self, step_key: str):
-        min_sec = float(self._app_settings.get(f"{step_key}_delay_min", 1.0))
-        max_sec = float(self._app_settings.get(f"{step_key}_delay_max", 2.5))
+        delays = getattr(self, "_delays", None) or {}
+        if step_key in delays:
+            min_sec, max_sec = delays[step_key]
+            min_sec, max_sec = float(min_sec), float(max_sec)
+        else:
+            min_sec = float(self._app_settings.get(f"{step_key}_delay_min", 1.0))
+            max_sec = float(self._app_settings.get(f"{step_key}_delay_max", 2.5))
         if max_sec < min_sec:
             max_sec = min_sec
         delay = random.uniform(min_sec, max_sec)
@@ -344,6 +398,35 @@ class ScraperThread(QThread):
                 return els[0]
         self._log(f"  [ERROR] [selector/{step_id}] all selectors failed")
         return None
+
+    # ── Resume state (§3.3) ───────────────────────────────────────────────────
+
+    def _save_state(self, tag_index: int, post_index: int):
+        """Persist resume progress to state.json via storage (§3.3)."""
+        from core import storage
+        state = {
+            "keyword": self.search_term.lstrip("#"),
+            "tag_index": int(tag_index),
+            "post_index": int(post_index),
+            "collected_count": int(getattr(self, "_collected", 0)),
+            "seen_usernames": sorted(getattr(self, "_seen", set())),
+            "updated_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        }
+        try:
+            storage.save_state(state)
+        except Exception as exc:
+            self._log(f"  [state-err] {exc}")
+
+    # ── Block detection (§5) ──────────────────────────────────────────────────
+
+    def _is_blocked(self, driver) -> bool:
+        """True if the session was redirected to a login/challenge/suspended
+        page, indicating a block (§5). Distinct from the initial login wait."""
+        try:
+            url = (driver.current_url or "").lower()
+        except Exception:
+            return False
+        return any(marker in url for marker in _BLOCKED_URL_MARKERS)
 
     # ── Dedup gate (§6) ───────────────────────────────────────────────────────
 
@@ -616,7 +699,7 @@ class ScraperThread(QThread):
         driver = None
         try:
             self._log("[browser] launching Chrome...")
-            driver = init_driver()
+            driver = init_driver(self._web)
             self._driver = driver
 
             driver.get("https://www.instagram.com/")
@@ -634,23 +717,26 @@ class ScraperThread(QThread):
             time.sleep(2)
 
             # Build excluded set (UI list + CSV file)
-            from core.storage import load_excluded, append_result
+            from core import storage
+            from core.storage import append_result
             excluded: set[str] = (
-                {u.lstrip("@").lower() for u in self.excluded_set}
-                | {u.lower() for u in load_excluded()}
+                {self._norm_username(u) for u in self.excluded_set}
+                | {u.lower() for u in storage.load_excluded()}
             )
 
-            # Avoid re-collecting accounts from previous runs
-            from core.storage import load_results
-            seen: set[str] = {r.get("username", "") for r in load_results() if r.get("username")}
+            # Unified seen set for early dedup gate (§6): results ∪ excluded
+            # ∪ resume-state seed (already loaded into self._seen by __init__).
+            self._seen |= {u for u in storage.seen_usernames()} | excluded
 
-            # Unified seen set for early dedup gate (§6).
-            self._seen = {u.lower() for u in seen if u} | excluded
+            if self._is_blocked(driver):
+                self.blocked_signal.emit()
+                self._log("[blocked] 차단 감지 - 일시정지")
+                return
 
             keyword   = self.search_term.lstrip("#")
-            collected = 0
+            collected = self._collected
 
-            for tag_index in range(self.max_tags):
+            for tag_index in range(self._start_tag_index, self.max_tags):
                 if self._stop or collected >= self.count:
                     break
 
@@ -685,6 +771,12 @@ class ScraperThread(QThread):
                     break
                 self._random_delay("step3")
 
+                if self._is_blocked(driver):
+                    self.blocked_signal.emit()
+                    self._log("[blocked] 차단 감지 - 일시정지")
+                    self._save_state(tag_index, 0)
+                    return
+
                 tag_grid_url = driver.current_url
                 self._log(f"[grid] {tag_grid_url}")
 
@@ -692,9 +784,17 @@ class ScraperThread(QThread):
                 self._step(f"Step 4/6 — Collecting post URLs from tag grid")
                 post_urls = self._step4_collect_post_urls(driver, self.posts_per_tag)
 
+                # Resume support: skip already-processed posts within the
+                # resumed tag only (§7).
+                resume_post_start = (
+                    self._start_post_index if tag_index == self._start_tag_index else 0
+                )
+
                 for post_idx, post_url in enumerate(post_urls):
                     if self._stop or collected >= self.count:
                         break
+                    if post_idx < resume_post_start:
+                        continue
 
                     # --- Step 4 (navigate to post) ---
                     self._step(
@@ -738,47 +838,57 @@ class ScraperThread(QThread):
 
                     username = info["username"]
 
-                    if username.lower() in excluded:
-                        self._log(f"  [skip] @{username} is excluded")
-                        driver.get(tag_grid_url)
-                        time.sleep(1.0)
-                        continue
-                    if username in seen:
-                        self._log(f"  [skip] @{username} already collected")
+                    # Dedup gate (covers excluded + already-collected + seen).
+                    if self._should_skip(username):
                         driver.get(tag_grid_url)
                         time.sleep(1.0)
                         continue
 
-                    # Follower filter
+                    # Follower filter (filter-failed usernames are marked seen
+                    # to prevent re-visiting, §6).
                     if self.min_followers > 0 or self.max_followers > 0:
                         f_num = parse_followers(info.get("followers", ""))
                         if self.min_followers > 0 and f_num < self.min_followers:
                             self._log(
                                 f"  [filter] @{username} {f_num:,} < min {self.min_followers:,}"
                             )
+                            self._seen.add(self._norm_username(username))
                             driver.get(tag_grid_url)
                             continue
                         if self.max_followers > 0 and f_num > self.max_followers:
                             self._log(
                                 f"  [filter] @{username} {f_num:,} > max {self.max_followers:,}"
                             )
+                            self._seen.add(self._norm_username(username))
                             driver.get(tag_grid_url)
                             continue
 
-                    seen.add(username)
-                    info["post_url"]     = post_url
-                    info["profile_url"]  = profile_url
-                    info["collected_at"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self._seen.add(self._norm_username(username))
+                    info["source_post_url"] = post_url
+                    info["post_url"]        = post_url
+                    info["profile_url"]     = profile_url
+                    info["source_tag"]      = keyword
+                    info["collected_at"]    = (
+                        datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+                    )
 
-                    append_result(info)
+                    appended = append_result(info)
+                    if not appended:
+                        self._log(f"  [skip] @{username} duplicate (not counted)")
+                        driver.get(tag_grid_url)
+                        time.sleep(1.0)
+                        continue
+
                     self.result_signal.emit(info)
                     collected += 1
+                    self._collected = collected
                     self.progress_signal.emit(collected, self.count)
                     self._log(
                         f"[OK] @{username}  "
                         f"followers={info.get('followers', '?')}  "
                         f"[{collected}/{self.count}]"
                     )
+                    self._save_state(tag_index, post_idx + 1)
                     self._random_delay("step6")
 
                     # Back to tag grid
@@ -787,6 +897,11 @@ class ScraperThread(QThread):
                     self._random_delay("back")
 
             self._log(f"[done] collected {collected} accounts")
+            # Normal completion → clear resume state (§7).
+            try:
+                storage.clear_state()
+            except Exception:
+                pass
 
         except Exception as exc:
             self.error_signal.emit(str(exc))

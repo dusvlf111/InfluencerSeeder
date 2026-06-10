@@ -107,15 +107,15 @@
         - [x] 2.4.T1 pytest (`class TestShouldSkip`): seen 에 있는 username True + skip_signal emit, 없는 username False, 대소문자/@ 정규화, 필터 탈락 username add 후 재호출 True.
         - [x] 2.4.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestShouldSkip -v` 실행 및 검증
 
-    - [ ] 2.5 생성자 재편 + state 재개 + step 완료마다 save_state
+    - [x] 2.5 생성자 재편 + state 재개 + step 완료마다 save_state
         **작업 상세:** §9. 생성자 시그니처를 PRD 기준으로 확장: `web, selectors, delays, flow, target, excluded_set, resume_state=None` 주입(기존 호출부 호환 위해 **키워드 기본값** 제공, 누락 시 `storage.load_*()` 로 자체 로드).
         `flow` 에서 `max_tags/posts_per_tag/scroll_max_attempts/tag_start_index/stop_on_consecutive_miss/skip_visited_profile` 읽기. `target` 에서 필터(min/max followers·following·posts) 읽기.
         `resume_state` 있으면 `tag_index=state["tag_index"]`, `post_index=state["post_index"]` 부터 시작, `seen` 에 `state["seen_usernames"]` 선로딩.
         매 step 완료 후 `storage.save_state({...})` 호출. 수집 완료/종료 시 정책에 따라 `clear_state()` (정상 완료 시).
         `append_result` 가 dedup False 반환하면 저장 skip 처리(중복 카운트 안 함).
         **참조:** PRD §3.3, §7, §9
-        - [ ] 2.5.T1 pytest (`class TestResumeAndState`): 생성자에 web/delays/flow/target/excluded 주입 시 속성 매핑 검증, resume_state 주입 시 tag/post index·seen 선로딩, `save_state` 가 `storage.save_state` 를 올바른 dict 로 호출(patch).
-        - [ ] 2.5.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestResumeAndState -v` 실행 및 검증
+        - [x] 2.5.T1 pytest (`class TestResumeAndState`): 생성자에 web/delays/flow/target/excluded 주입 시 속성 매핑 검증, resume_state 주입 시 tag/post index·seen 선로딩, `save_state` 가 `storage.save_state` 를 올바른 dict 로 호출(patch).
+        - [x] 2.5.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestResumeAndState -v` 실행 및 검증
 
     - [ ] 2.6 차단 감지 → `blocked_signal` + 일시정지
         **작업 상세:** §5 한계. `_is_blocked(driver) -> bool`: `driver.current_url` 가 로그인/챌린지 경로(`/accounts/login`, `/challenge`, `/accounts/suspended` 등) 포함이면 True. run() 의 각 네비게이션 후 검사 → True 면 `blocked_signal.emit()` + `_log("[blocked] 차단 감지 - 일시정지")` + 루프 중단(`self._stop` 또는 대기). 로그인 대기와 구분.

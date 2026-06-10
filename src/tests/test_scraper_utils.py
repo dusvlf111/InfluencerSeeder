@@ -269,6 +269,100 @@ class TestShouldSkip:
         assert t._should_skip("") is False
 
 
+class TestResumeAndState:
+    @pytest.fixture(autouse=True)
+    def _isolate_storage(self, tmp_path, monkeypatch):
+        from core import storage
+        monkeypatch.setattr(storage, "DATA_DIR", tmp_path)
+
+    def _kwargs(self, **over):
+        base = dict(
+            mode="hashtag",
+            search_term="인턴",
+            count=10,
+            min_followers=0,
+            max_followers=0,
+            excluded_set=set(),
+            web={"headless": "false"},
+            delays={"typing_char": (0.05, 0.1), "step1": (1.0, 2.0)},
+            flow={
+                "max_tags": 5,
+                "posts_per_tag": 7,
+                "scroll_max_attempts": 9,
+                "tag_start_index": 2,
+                "stop_on_consecutive_miss": 4,
+                "skip_visited_profile": "true",
+            },
+            target={
+                "min_followers": 1000,
+                "max_followers": 50000,
+                "min_following": 10,
+                "max_following": 200,
+                "min_posts": 5,
+            },
+        )
+        base.update(over)
+        return base
+
+    def test_config_groups_mapped(self):
+        t = ScraperThread(**self._kwargs())
+        assert t.max_tags == 5
+        assert t.posts_per_tag == 7
+        assert t.scroll_max_attempts == 9
+        assert t.tag_start_index == 2
+        assert t.stop_on_consecutive_miss == 4
+        assert t.skip_visited_profile is True
+        # min/max_followers were 0 -> pulled from target
+        assert t.min_followers == 1000
+        assert t.max_followers == 50000
+        assert t.min_following == 10
+        assert t.max_following == 200
+        assert t.min_posts == 5
+
+    def test_delays_attached(self):
+        t = ScraperThread(**self._kwargs())
+        assert t._delays["typing_char"] == (0.05, 0.1)
+
+    def test_no_resume_defaults(self):
+        t = ScraperThread(**self._kwargs())
+        assert t._start_tag_index == 2  # from tag_start_index
+        assert t._start_post_index == 0
+        assert t._collected == 0
+        assert t._seen == set()
+
+    def test_resume_state_loaded(self):
+        t = ScraperThread(**self._kwargs(resume_state={
+            "tag_index": 3,
+            "post_index": 4,
+            "collected_count": 12,
+            "seen_usernames": ["Abc", "@DEF"],
+        }))
+        assert t._start_tag_index == 3
+        assert t._start_post_index == 4
+        assert t._collected == 12
+        assert t._seen == {"abc", "def"}
+
+    def test_save_state_calls_storage(self):
+        t = ScraperThread(**self._kwargs())
+        t._seen = {"abc", "def"}
+        t._collected = 7
+        with patch("core.storage.save_state") as save:
+            t._save_state(tag_index=2, post_index=3)
+        assert save.call_count == 1
+        payload = save.call_args[0][0]
+        assert payload["keyword"] == "인턴"
+        assert payload["tag_index"] == 2
+        assert payload["post_index"] == 3
+        assert payload["collected_count"] == 7
+        assert sorted(payload["seen_usernames"]) == ["abc", "def"]
+        assert "updated_at" in payload
+
+    def test_explicit_followers_not_overridden_by_target(self):
+        t = ScraperThread(**self._kwargs(min_followers=3000, max_followers=4000))
+        assert t.min_followers == 3000
+        assert t.max_followers == 4000
+
+
 class TestScraperThreadPassesFollowerFilter:
     def _make_thread(self, min_f=0, max_f=0):
         t = ScraperThread.__new__(ScraperThread)
