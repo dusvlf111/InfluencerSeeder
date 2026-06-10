@@ -1,5 +1,4 @@
 import csv
-import json
 import shutil
 from pathlib import Path
 
@@ -339,27 +338,7 @@ def export_results(dest_path: str):
     shutil.copy2(str(src), dest_path)
 
 
-# ── State (§3.3 — 재개용 진행 상태) ─────────────────────────────────────────────
+# ── Sibling module re-exports (defined after primitives; no import cycle) ───────
 
-def load_state() -> dict | None:
-    """Return resume state dict, or None if missing/corrupt."""
-    path = _path("state.json")
-    if not path.exists():
-        return None
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else None
-    except Exception:
-        return None
-
-
-def save_state(data: dict):
-    path = _path("state.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-def clear_state():
-    path = _path("state.json")
-    Path(path).unlink(missing_ok=True)
+# State (§3.3 — 재개용 진행 상태)
+from core.storage_state import load_state, save_state, clear_state  # noqa: E402
