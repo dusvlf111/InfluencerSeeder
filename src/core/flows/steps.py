@@ -414,6 +414,12 @@ class ExtractProfile(Step):
         except Exception:
             result["website"] = ""
 
+        # ── Fallback: user-configured selectors (버튼매핑 탭) for empty fields ──────
+        # Fills fields that meta/page_source/CSS heuristics left empty using the
+        # priority selector chains from selectors.csv. Username stays URL-based;
+        # this only augments. Failures are swallowed (existing values kept).
+        self._fill_from_selectors(ctx, result)
+
         t._log(
             f"  [6] @{username_part}  "
             f"followers={result.get('followers', '?')}  "
@@ -421,6 +427,50 @@ class ExtractProfile(Step):
         )
         ctx.profile_info = result
         return Outcome.CONTINUE
+
+    # field → (selector step_id, extraction mode)
+    _SELECTOR_FALLBACKS = [
+        ("full_name",   "username_text",   "text"),
+        ("followers",   "followers_count", "count"),
+        ("following",   "following_count", "count"),
+        ("posts_count", "posts_count",     "count"),
+        ("bio",         "bio_text",        "text"),
+        ("website",     "website_link",    "href"),
+    ]
+
+    def _fill_from_selectors(self, ctx, result: dict) -> None:
+        """Augment empty ``result`` fields via the configured selector chains.
+
+        For each (field, step_id) pair, when ``result[field]`` is missing/empty,
+        resolve the element through ``thread._resolve_selector`` (priority
+        fallback, settings first) and read its text / title / href. Any error or
+        empty value leaves the field untouched."""
+        t, driver = ctx.thread, ctx.driver
+        for field, step_id, mode in self._SELECTOR_FALLBACKS:
+            if result.get(field):
+                continue
+            try:
+                el = t._resolve_selector(driver, step_id)
+            except Exception:
+                el = None
+            if el is None or isinstance(el, tuple):
+                continue
+            value = ""
+            try:
+                if mode == "href":
+                    value = (el.get_attribute("href") or "").strip() or (el.text or "").strip()
+                elif mode == "count":
+                    # follower/following/posts often live in a span @title.
+                    value = (el.get_attribute("title") or "").strip() or (el.text or "").strip()
+                else:  # text
+                    value = (el.text or "").strip()
+            except Exception:
+                value = ""
+            if value:
+                if field == "bio":
+                    value = value[:300]
+                result[field] = value
+                t._log(f"  [6/selector] {field} ← {step_id}")
 
 
 class ApplyFilters(Step):

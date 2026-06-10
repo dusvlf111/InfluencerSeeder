@@ -581,3 +581,109 @@ class TestConfigurableFlowEditing:
         with patch.object(cfg.HashtagFlow, "run", _spy):
             _run_configurable(ctx, ["https://www.instagram.com/p/abc/"], info)
         assert called["n"] == 1
+
+
+class TestExtractProfileSelectorFallback:
+    """ExtractProfile augments empty fields via user-configured selectors
+    (B). meta/page_source are stubbed empty so the selector chain fills them.
+    _resolve_selector is MagicMock'd — no live browser."""
+
+    def _thread(self, resolve_map):
+        t = ScraperThread.__new__(ScraperThread)
+        t._log = lambda msg: None
+
+        def _resolve(driver, step_id):
+            return resolve_map.get(step_id)
+
+        t._resolve_selector = _resolve
+        return t
+
+    def _driver_no_meta(self, url="https://www.instagram.com/someuser/"):
+        d = MagicMock()
+        d.current_url = url
+        # meta description + bio/website CSS all raise (nothing found),
+        # page_source has no JSON counts.
+        d.find_element.side_effect = Exception("not found")
+        d.page_source = "<html></html>"
+        return d
+
+    def test_followers_filled_from_selector(self):
+        from core.flows.steps import ExtractProfile
+        el = MagicMock()
+        el.get_attribute.return_value = "12,345"   # title attribute
+        el.text = "12,345"
+        t = self._thread({"followers_count": el})
+        driver = self._driver_no_meta()
+        ctx = ScrapeContext(thread=t, driver=driver)
+        out = ExtractProfile().execute(ctx)
+        assert out is Outcome.CONTINUE
+        assert ctx.profile_info["followers"] == "12,345"
+
+    def test_multiple_fields_filled(self):
+        from core.flows.steps import ExtractProfile
+
+        def _el(title="", text="", href=""):
+            m = MagicMock()
+            m.text = text
+
+            def _attr(name):
+                return {"title": title, "href": href}.get(name, "")
+
+            m.get_attribute.side_effect = _attr
+            return m
+
+        resolve_map = {
+            "username_text": _el(text="홍길동"),
+            "followers_count": _el(title="1,000"),
+            "following_count": _el(text="200"),
+            "posts_count": _el(text="42"),
+            "bio_text": _el(text="안녕하세요 개발자입니다"),
+            "website_link": _el(href="https://example.com"),
+        }
+        t = self._thread(resolve_map)
+        driver = self._driver_no_meta()
+        ctx = ScrapeContext(thread=t, driver=driver)
+        ExtractProfile().execute(ctx)
+        info = ctx.profile_info
+        assert info["full_name"] == "홍길동"
+        assert info["followers"] == "1,000"
+        assert info["following"] == "200"
+        assert info["posts_count"] == "42"
+        assert info["bio"] == "안녕하세요 개발자입니다"
+        assert info["website"] == "https://example.com"
+
+    def test_meta_value_not_overwritten_by_selector(self):
+        # When meta already provided followers, the selector fallback must NOT
+        # overwrite it.
+        from core.flows.steps import ExtractProfile
+        el = MagicMock()
+        el.get_attribute.return_value = "999"
+        el.text = "999"
+        t = self._thread({"followers_count": el})
+
+        d = MagicMock()
+        d.current_url = "https://www.instagram.com/someuser/"
+        meta = MagicMock()
+        meta.get_attribute.return_value = "5,000 Followers, 10 Following, 3 Posts"
+
+        def _find(by, value):
+            if "meta" in str(value):
+                return meta
+            raise Exception("not found")
+
+        d.find_element.side_effect = _find
+        d.page_source = "<html></html>"
+        ctx = ScrapeContext(thread=t, driver=d)
+        ExtractProfile().execute(ctx)
+        assert ctx.profile_info["followers"] == "5,000"
+
+    def test_no_selectors_leaves_fields_empty(self):
+        from core.flows.steps import ExtractProfile
+        t = self._thread({})   # _resolve_selector returns None for everything
+        driver = self._driver_no_meta()
+        ctx = ScrapeContext(thread=t, driver=driver)
+        out = ExtractProfile().execute(ctx)
+        assert out is Outcome.CONTINUE
+        # username still set from URL; no followers populated.
+        assert ctx.profile_info["username"] == "someuser"
+        assert "followers" not in ctx.profile_info
