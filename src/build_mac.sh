@@ -84,6 +84,26 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# ----- Ensure Google Chrome -----
+# Selenium launches Chrome at runtime. On macOS the NSS libraries are bundled
+# inside Google Chrome.app, so they can't go missing as long as Chrome exists.
+echo ""
+echo "[*] Checking Google Chrome..."
+if [ -d "/Applications/Google Chrome.app" ] || [ -d "$HOME/Applications/Google Chrome.app" ]; then
+    echo "      Found Google Chrome."
+elif command -v brew &>/dev/null; then
+    echo "      Chrome not found. Installing via Homebrew cask..."
+    if brew install --cask google-chrome > /tmp/chrome_install.log 2>&1; then
+        echo "      Chrome installed."
+    else
+        echo "      [WARN] Chrome install failed (see /tmp/chrome_install.log)."
+        echo "             Install manually from https://www.google.com/chrome/"
+    fi
+else
+    echo "      [WARN] Chrome not found and Homebrew unavailable."
+    echo "             Install Chrome manually from https://www.google.com/chrome/"
+fi
+
 # ----- Step 2: Virtual environment -----
 echo ""
 echo "[2/5] Setting up virtual environment..."

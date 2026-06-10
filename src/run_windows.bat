@@ -36,6 +36,21 @@ exit /b 1
 for /f "tokens=*" %%v in ('!PYTHON_CMD! --version 2^>^&1') do set PYTHON_VERSION=%%v
 echo [1/3] Python: !PYTHON_VERSION!
 
+:: ----- Ensure Google Chrome (Selenium launches it; NSS DLLs ship inside Chrome) -----
+set "CHROME_FOUND="
+if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
+if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
+if exist "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
+if not defined CHROME_FOUND (
+    echo       Chrome not found. Installing via winget...
+    winget --version > nul 2>&1
+    if errorlevel 1 (
+        echo [WARN] winget unavailable. Install Chrome from https://www.google.com/chrome/
+    ) else (
+        winget install Google.Chrome --silent --accept-package-agreements --accept-source-agreements > nul 2>&1
+    )
+)
+
 :: ----- Step 2: Virtual environment + dependencies -----
 :: Reuse the same venv as build_windows.bat (skips fast if it already exists).
 set VENV_PY=.venv_win\Scripts\python.exe

@@ -69,6 +69,39 @@ echo       Installed: !PYTHON_VERSION!
 :PYTHON_OK
 
 :: -------------------------------------------------------
+:: Step 1.5: Ensure Google Chrome
+::   Selenium launches Chrome at runtime; the NSS libraries
+::   (nss3.dll / nspr4.dll — the Windows equivalent of
+::   libnss3/libnspr4) ship INSIDE the Chrome install. If Chrome
+::   is missing, the built app fails to start the browser.
+:: -------------------------------------------------------
+echo.
+echo [*] Checking Google Chrome...
+
+set "CHROME_FOUND="
+if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
+if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
+if exist "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
+
+if defined CHROME_FOUND (
+    echo       Found Google Chrome.
+) else (
+    echo       Chrome not found. Installing via winget...
+    winget --version > nul 2>&1
+    if errorlevel 1 (
+        echo [WARN] winget unavailable. Install Chrome manually from
+        echo        https://www.google.com/chrome/  ^(required to run the app^).
+    ) else (
+        winget install Google.Chrome --silent --accept-package-agreements --accept-source-agreements
+        if errorlevel 1 (
+            echo [WARN] Chrome install failed. Install manually from https://www.google.com/chrome/
+        ) else (
+            echo       Chrome installed.
+        )
+    )
+)
+
+:: -------------------------------------------------------
 :: Step 2: Create virtual environment
 :: -------------------------------------------------------
 echo.

@@ -23,6 +23,17 @@ if ! command -v python3 &>/dev/null; then
 fi
 echo "[1/3] Python: $(python3 --version 2>&1)"
 
+# ----- Ensure Google Chrome (Selenium launches it; NSS is bundled in Chrome.app) -----
+if [ ! -d "/Applications/Google Chrome.app" ] && [ ! -d "$HOME/Applications/Google Chrome.app" ]; then
+    if command -v brew &>/dev/null; then
+        echo "      Chrome not found. Installing via Homebrew cask..."
+        brew install --cask google-chrome > /tmp/chrome_install.log 2>&1 \
+            || echo "      [WARN] Chrome install failed. Install from https://www.google.com/chrome/"
+    else
+        echo "      [WARN] Chrome not found. Install from https://www.google.com/chrome/"
+    fi
+fi
+
 # ----- Step 2: Virtual environment + dependencies -----
 # Reuse the same venv as build_mac.sh (skips fast if it already exists).
 VENV_DIR=".venv_mac"
