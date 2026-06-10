@@ -456,18 +456,29 @@ class EmbeddedScraper(QObject):
         if not ok:
             self._log("  [skip] 태그 결과 없음 → 다음 키워드")
             return self._after("step3", self._next_keyword)
+        self._grid_tries = 0
         self._after("step3", self._count_posts)
 
     def _count_posts(self):
-        self._step("게시물 수 확인")
+        self._step("게시물 그리드 로딩 확인")
         self._js(build_count_js(self._cands("post_link")), self._after_count)
 
     def _after_count(self, n):
-        self._post_total = int(n or 0)
-        self._post_idx = 1 if self._skip_first else 0   # 첫 썸네일=본인 → 건너뜀
-        if self._post_total <= self._post_idx:
+        n = int(n or 0)
+        threshold = 1 if self._skip_first else 0
+        if n <= threshold:
+            # 태그 클릭 직후 그리드가 아직 안 떴을 수 있음 → 스크롤/대기 후 재확인.
+            self._grid_tries = getattr(self, "_grid_tries", 0) + 1
+            if self._running and self._grid_tries <= 5:
+                self._log(f"  [grid] 게시물 로딩 대기... ({self._grid_tries}/5)")
+                self._js("window.scrollBy(0, 600); true",
+                         lambda _ok: self._after("scroll", self._count_posts))
+                return
             self._log("  [skip] 게시물 없음 → 다음 키워드")
             return self._next_keyword()
+        self._post_total = n
+        self._post_idx = threshold   # 첫 썸네일=본인 → 건너뜀
+        self._log(f"  [grid] 게시물 {n}개 감지 → 이미지 클릭 시작")
         self._open_post()
 
     def _open_post(self):
