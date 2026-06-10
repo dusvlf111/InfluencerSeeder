@@ -83,6 +83,29 @@ def click_coord(driver, thread, coord):
         thread._log(f"  [coord-err] click at {coord} failed: {exc}")
 
 
+# JavaScript: 탐색(Explore)/검색 진입 요소를 찾아 클릭. 모바일/데스크톱 IG 모두
+# 커버하도록 explore 링크·aria-label(검색/Search/탐색/Explore)·search 링크 순으로
+# 시도하고, 가장 가까운 <a>(또는 button)를 클릭한다. 성공 시 true.
+_JS_CLICK_SEARCH = """
+(function(){
+    var sels = [
+        "a[href='/explore/']", "a[href^='/explore/']", "a[href*='/explore/']",
+        "svg[aria-label='검색']", "svg[aria-label='Search']",
+        "svg[aria-label='탐색']", "svg[aria-label='Explore']",
+        "a[href*='/search']", "[role='link'][href*='/explore']"
+    ];
+    for (var i=0; i<sels.length; i++){
+        var el = document.querySelector(sels[i]);
+        if (el){
+            var target = (el.closest && (el.closest('a') || el.closest("[role='link']") || el.closest('button'))) || el;
+            try { target.click(); return true; } catch(e) {}
+        }
+    }
+    return false;
+})()
+"""
+
+
 def robust_click(driver, thread, el) -> bool:
     """Click ``el`` with fallbacks for 'element click intercepted'.
 
@@ -151,6 +174,15 @@ class ClickStep(Step):
         ref = self.selector_ref or "search_icon"
         el = t._resolve_selector(driver, ref)
         if el is None:
+            # 셀렉터 체인이 모두 실패해도, search_icon 은 JS 로 탐색/검색 링크를
+            # 직접 찾아 클릭(모바일 DOM 등 셀렉터 불일치 대비).
+            if ref == "search_icon":
+                try:
+                    if driver.execute_script(_JS_CLICK_SEARCH):
+                        t._log("  [1] search icon clicked (JS 탐색 폴백)")
+                        return Outcome.CONTINUE
+                except Exception as exc:
+                    t._log(f"  [1-js-err] {exc}")
             raise RuntimeError(f"{ref} selector chain exhausted")
         if isinstance(el, tuple) and el[0] == "coord":
             click_coord(driver, t, el[1])
