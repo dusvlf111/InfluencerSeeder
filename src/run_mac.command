@@ -1,19 +1,49 @@
 #!/bin/bash
-# 인플루언서 시딩기 시작 스크립트 (macOS)
-# 이 파일을 더블클릭하면 자동으로 실행됩니다.
+# InfluencerSeeder - Run script (macOS)
+# Double-click this file to run the app directly from source.
+# (For installation/packaging, use build_mac.sh)
 
-cd "$(dirname "$0")"
+set -euo pipefail
 
-# Python3 설치 확인
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+echo ""
+echo "============================================================"
+echo "  InfluencerSeeder - Run (macOS)"
+echo "============================================================"
+echo ""
+
+# ----- Step 1: Check Python 3 -----
 if ! command -v python3 &>/dev/null; then
-    osascript -e 'display alert "Python3가 설치되어 있지 않습니다." message "https://www.python.org 에서 Python을 설치해주세요."'
+    osascript -e 'display alert "Python 3 is not installed." message "Please install Python from https://www.python.org and run again."' 2>/dev/null || true
+    echo "[ERROR] Python 3 not found. Install it from https://www.python.org and run again."
+    read -r -p "Press Enter to exit..." _
     exit 1
 fi
+echo "[1/3] Python: $(python3 --version 2>&1)"
 
-# 의존성 설치 (이미 설치된 경우 빠르게 통과)
-echo "의존성 확인 중..."
-python3 -m pip install -r requirements.txt --quiet
+# ----- Step 2: Virtual environment + dependencies -----
+# Reuse the same venv as build_mac.sh (skips fast if it already exists).
+VENV_DIR=".venv_mac"
+VENV_PY="$VENV_DIR/bin/python"
 
-# 앱 실행
-echo "앱 시작..."
-python3 main.py
+if [ ! -x "$VENV_PY" ]; then
+    echo "[2/3] First run: creating venv and installing dependencies (2-5 min)..."
+    python3 -m venv "$VENV_DIR"
+    "$VENV_PY" -m pip install --upgrade pip --quiet
+    "$VENV_PY" -m pip install -r requirements.txt --quiet
+else
+    # venv exists but packages may be missing - quick check, then top up.
+    if ! "$VENV_PY" -c "import PyQt6, selenium, webdriver_manager" &>/dev/null; then
+        echo "[2/3] Installing missing dependencies..."
+        "$VENV_PY" -m pip install -r requirements.txt --quiet
+    else
+        echo "[2/3] Virtual environment OK."
+    fi
+fi
+
+# ----- Step 3: Launch app -----
+echo "[3/3] Starting app..."
+echo ""
+"$VENV_PY" main.py
