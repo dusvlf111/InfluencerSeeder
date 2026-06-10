@@ -98,13 +98,49 @@ class TypeStep(Step):
     def execute(self, ctx) -> Outcome:
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
+        from selenium.common.exceptions import (
+            ElementNotInteractableException,
+            InvalidElementStateException,
+            StaleElementReferenceException,
+        )
         t, driver = ctx.thread, ctx.driver
-        by, value = t._get_by(self.selector_ref or "search_input")
-        wait = WebDriverWait(driver, 10)
-        inp = wait.until(EC.presence_of_element_located((by, value)))
-        inp.clear()
+        ref = self.selector_ref or "search_input"
+        by, value = t._get_by(ref)
         text = _expand_param(ctx, self.param if self.param else "#{keyword}")
-        t._human_type(inp, text)
+
+        # Resolve via the priority fallback chain first (tries the Korean
+        # candidate before the English one); fall back to a single lookup.
+        inp = t._resolve_selector(driver, ref)
+        if inp is None or isinstance(inp, tuple):
+            inp = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((by, value))
+            )
+
+        # The input must be interactable, not merely present: wait for it to
+        # become clickable and focus it before typing (avoids the empty-message
+        # ElementNotInteractable chromedriver error on the sliding search panel).
+        try:
+            inp = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((by, value)))
+        except Exception:
+            pass
+        try:
+            inp.click()
+        except Exception:
+            pass
+        try:
+            inp.clear()
+        except (InvalidElementStateException, ElementNotInteractableException):
+            pass
+
+        # Instagram re-renders the search box as suggestions appear, which can
+        # stale the element mid-typing — re-find and send the whole string once.
+        try:
+            t._human_type(inp, text)
+        except StaleElementReferenceException:
+            inp = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((by, value))
+            )
+            inp.send_keys(text)
         t._log(f"  [{self.log_index}] typed {text}")
         return Outcome.CONTINUE
 
