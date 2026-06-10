@@ -157,6 +157,18 @@ _SELECTOR_DEFAULTS: list[dict] = [
         "selector_value": "a[href*='/explore/tags/']",
     },
 
+    # ── 캡션 키워드 검색결과(계정) 클릭 — 클릭 시 바로 프로필로 이동 ──────────
+    {
+        "step_id": "keyword_result", "step_name": "검색결과(계정) 클릭", "priority": 1,
+        "selector_type": "xpath",
+        "selector_value": "//a[@role='link' and starts-with(@href,'/') and not(contains(@href,'/explore/')) and not(contains(@href,'/p/')) and not(contains(@href,'/reel/')) and string-length(@href)>2]",
+    },
+    {
+        "step_id": "keyword_result", "step_name": "검색결과(계정) 클릭", "priority": 2,
+        "selector_type": "css",
+        "selector_value": "a[role='link'][href^='/']:not([href='/'])",
+    },
+
     # ── 게시물 링크 (Step4) — 그리드 썸네일 ──────────────────────────────────
     {
         "step_id": "post_link", "step_name": "이미지 클릭(Step4)", "priority": 1,

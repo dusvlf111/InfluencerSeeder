@@ -583,7 +583,12 @@ class EmbeddedScraper(QObject):
         if not ok:
             self._log("  [skip] 검색창 입력 실패 → 다음 키워드")
             return self._after("step2", self._next_keyword)
-        self._after("step2", self._do_tag)
+        if self.mode == "hashtag":
+            # 해시태그: 태그 제안 클릭 → 게시물 그리드.
+            self._after("step2", self._do_tag)
+        else:
+            # 캡션 키워드: 검색 결과가 계정 목록이고 클릭하면 바로 프로필.
+            self._after("step2", self._kw_start)
 
     def _do_tag(self):
         self._step("태그 결과 클릭 (제안 로딩 대기)")
@@ -661,49 +666,44 @@ class EmbeddedScraper(QObject):
 
     def _extract(self):
         self._step("프로필 정보 저장 (로딩 대기)")
-        self._wait_profile(self._WAIT_TRIES)
+        self._wait_profile(self._WAIT_TRIES, self._after_extract)
 
-    def _wait_profile(self, left):
-        """프로필 헤더(팔로워/유저네임)가 로딩될 때까지 기다렸다 추출."""
+    def _wait_profile(self, left, cb):
+        """프로필 헤더(팔로워/유저네임)가 로딩될 때까지 기다렸다 cb(data) 호출."""
         cands = self._cands("followers_count") + self._cands("username_text")
-        self._js(build_count_js(cands), lambda n: self._on_profile_ready(int(n or 0), left))
+        self._js(build_count_js(cands), lambda n: self._on_profile_ready(int(n or 0), left, cb))
 
-    def _on_profile_ready(self, n, left):
+    def _on_profile_ready(self, n, left, cb):
         if n > 0 or left <= 0 or not self._running:
-            self._js(build_profile_js(self._selectors), self._after_extract)
+            self._js(build_profile_js(self._selectors), cb)
         else:
             self._log(f"  [wait/profile] 프로필 로딩 대기... ({self._WAIT_TRIES - left + 1}/{self._WAIT_TRIES})")
-            self._sleep(self._WAIT_MS, lambda: self._wait_profile(left - 1))
+            self._sleep(self._WAIT_MS, lambda: self._wait_profile(left - 1, cb))
 
-    def _after_extract(self, data):
-        info = parse_profile(data or {})
-        # 프로필 페이지에 있으므로, 복귀는 항상 뒤로가기 2번
-        # (프로필 → 게시물 → 태그 그리드).
+    def _save_info(self, info, after_cb):
+        """프로필 dedup/필터/저장 처리 후 after_cb() 로 다음 단계 진행.
+
+        username 없음/중복/필터 탈락이면 저장 없이 after_cb. 두 모드(해시태그/
+        캡션)가 공유하며, 복귀(뒤로가기) 방식만 after_cb 로 다르게 준다."""
+        import datetime
+        from core import storage
         if not info or not info.get("username"):
             self._log("  [skip] 유저네임 추출 실패")
-            self._post_idx += 1
-            return self._go_back_n(2, self._open_post)
+            return after_cb()
         username = info["username"]
         norm = username.lower()
         if norm in self._seen:
             self.skip_signal.emit(username)
-            self._post_idx += 1
-            return self._go_back_n(2, self._open_post)
-        # 팔로워 필터
+            self._log(f"  [skip] 중복: @{norm}")
+            return after_cb()
         if self.min_followers > 0 or self.max_followers > 0:
             f = parse_followers(info.get("followers", ""))
             if (self.min_followers > 0 and f < self.min_followers) or \
                (self.max_followers > 0 and f > self.max_followers):
                 self._log(f"  [filter] @{username} {f:,} 범위 밖")
                 self._seen.add(norm)
-                self._post_idx += 1
-                return self._go_back_n(2, self._open_post)
-        self._save(info)
-
-    def _save(self, info):
-        import datetime
-        from core import storage
-        self._seen.add(info["username"].lower())
+                return after_cb()
+        self._seen.add(norm)
         info["source_tag"] = self._cur_keyword
         info["collected_at"] = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
         try:
@@ -715,12 +715,49 @@ class EmbeddedScraper(QObject):
             self._collected += 1
             self.result_signal.emit(info)
             self.progress_signal.emit(self._collected, self.count)
-            self._log(f"[OK] @{info['username']}  "
+            self._log(f"[OK] @{username}  "
                       f"followers={info.get('followers', '?')}  "
                       f"[{self._collected}/{self.count}]")
+        after_cb()
+
+    def _after_extract(self, data):
+        # 해시태그 모드: 프로필에서 복귀 = 뒤로가기 2번(프로필→게시물→그리드).
+        info = parse_profile(data or {})
         self._post_idx += 1
-        # 저장 완료(프로필 페이지) → 뒤로가기 2번으로 태그 그리드 복귀.
-        self._after("step6", lambda: self._go_back_n(2, self._open_post))
+        self._after("step6", lambda: self._save_info(
+            info, lambda: self._go_back_n(2, self._open_post)))
+
+    # ── 캡션 키워드 모드(검색결과=계정 목록, 클릭하면 바로 프로필) ───────────────
+
+    def _kw_start(self):
+        self._kw_res_idx = 0
+        self._after("step3", self._kw_open)
+
+    def _kw_open(self):
+        if not self._running or self._collected >= self.count:
+            return self._finish()
+        if self._kw_res_idx >= 12:   # 검색결과 최대 시도 수
+            return self._after("back", self._next_keyword)
+        self._step(f"검색결과 프로필 클릭 {self._kw_res_idx + 1}")
+        self._dismiss(lambda: self._click_index_ready(
+            "keyword_result", self._kw_res_idx, self._kw_after_click))
+
+    def _kw_after_click(self, ok):
+        if not ok:
+            self._log("  [skip] 검색결과 없음 → 다음 키워드")
+            return self._after("back", self._next_keyword)
+        self._after("step5", self._kw_extract)
+
+    def _kw_extract(self):
+        self._step("프로필 정보 저장 (로딩 대기)")
+        self._wait_profile(self._WAIT_TRIES, self._kw_after_extract)
+
+    def _kw_after_extract(self, data):
+        info = parse_profile(data or {})
+        self._kw_res_idx += 1
+        # 캡션 모드: 결과 클릭으로 바로 프로필 → 복귀 뒤로가기 1번(검색결과로).
+        self._after("step6", lambda: self._save_info(
+            info, lambda: self._go_back_n(1, self._kw_open)))
 
     def _go_back_n(self, n, cb):
         """뒤로가기를 n번 연속 수행한 뒤 cb(). 프로필→게시물→태그그리드처럼
