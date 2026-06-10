@@ -196,6 +196,45 @@ class TestStealth:
         assert "navigator" in joined and "webdriver" in joined
 
 
+class TestHumanType:
+    def _make_thread(self, typing=(0.05, 0.18)):
+        t = ScraperThread.__new__(ScraperThread)
+        t._delays = {"typing_char": typing}
+        return t
+
+    def test_send_keys_called_per_char(self):
+        t = self._make_thread()
+        el = MagicMock()
+        with patch("core.scraper.time.sleep"), \
+             patch("core.scraper.random.uniform", return_value=0.1):
+            t._human_type(el, "#abc")
+        assert el.send_keys.call_count == len("#abc")
+
+    def test_sleep_called_per_char(self):
+        t = self._make_thread()
+        el = MagicMock()
+        with patch("core.scraper.time.sleep") as sleep, \
+             patch("core.scraper.random.uniform", return_value=0.1):
+            t._human_type(el, "hello")
+        assert sleep.call_count == len("hello")
+
+    def test_empty_string_no_calls(self):
+        t = self._make_thread()
+        el = MagicMock()
+        with patch("core.scraper.time.sleep") as sleep:
+            t._human_type(el, "")
+        assert el.send_keys.call_count == 0
+        assert sleep.call_count == 0
+
+    def test_uses_delays_range(self):
+        t = self._make_thread(typing=(0.2, 0.4))
+        el = MagicMock()
+        with patch("core.scraper.time.sleep"), \
+             patch("core.scraper.random.uniform", return_value=0.3) as uni:
+            t._human_type(el, "ab")
+        uni.assert_called_with(0.2, 0.4)
+
+
 class TestScraperThreadPassesFollowerFilter:
     def _make_thread(self, min_f=0, max_f=0):
         t = ScraperThread.__new__(ScraperThread)

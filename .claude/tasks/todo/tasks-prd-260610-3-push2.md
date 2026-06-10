@@ -92,12 +92,12 @@
         - [x] 2.2.T1 pytest (`class TestStealth`): `randomize_user_agent` 토글 시 UA 인자 추가 여부, `randomize_window` True/False 시 window-size 분기, `headless=true` 시 `--headless=new` 추가. Options 객체는 실제 selenium Options 또는 MagicMock 으로 add_argument 호출 인자 검증(webdriver.Chrome 은 patch).
         - [x] 2.2.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestStealth -v` 실행 및 검증
 
-    - [ ] 2.3 `_human_type(el, text)` — 글자별 딜레이 타이핑
+    - [x] 2.3 `_human_type(el, text)` — 글자별 딜레이 타이핑
         **작업 상세:** §5. `typing_char` 딜레이(`self._delays["typing_char"]` = (min,max))를 글자마다 `random.uniform` 후 `el.send_keys(ch)` + `time.sleep`. 빈 문자열 안전 처리. 호출 횟수 = `len(text)`.
         Step2 `_step2_type_search` 가 `inp.send_keys` 대신 `_human_type(inp, f"#{keyword}")` 쓰도록 교체.
         **참조:** PRD §5, 이미지 `2_검색 클릭.png`
-        - [ ] 2.3.T1 pytest (`class TestHumanType`): MagicMock el 로 `send_keys` 호출 횟수 == len(text), `time.sleep` patch 호출됨, 빈 문자열 시 호출 0회.
-        - [ ] 2.3.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestHumanType -v` 실행 및 검증
+        - [x] 2.3.T1 pytest (`class TestHumanType`): MagicMock el 로 `send_keys` 호출 횟수 == len(text), `time.sleep` patch 호출됨, 빈 문자열 시 호출 0회.
+        - [x] 2.3.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestHumanType -v` 실행 및 검증
 
     - [ ] 2.4 `_should_skip(username)` — 조기 dedup 게이트 (§6)
         **작업 상세:** §6. `self._seen` set(= `storage.seen_usernames()` ∪ 정규화된 `excluded_set`, 생성자에서 구성) 기준.

@@ -260,6 +260,22 @@ class ScraperThread(QThread):
         self._log(f"  [delay/{step_key}] {delay:.1f}s")
         time.sleep(delay)
 
+    def _typing_delay_range(self) -> tuple[float, float]:
+        delays = getattr(self, "_delays", None) or {}
+        lo, hi = delays.get("typing_char", (0.05, 0.18))
+        return float(lo), float(hi)
+
+    def _human_type(self, el, text: str):
+        """Type ``text`` one character at a time with per-char random delay (§5)."""
+        if not text:
+            return
+        lo, hi = self._typing_delay_range()
+        if hi < lo:
+            hi = lo
+        for ch in text:
+            el.send_keys(ch)
+            time.sleep(random.uniform(lo, hi))
+
     # ── Selector helpers ──────────────────────────────────────────────────────
 
     @staticmethod
@@ -362,7 +378,7 @@ class ScraperThread(QThread):
         wait = WebDriverWait(driver, 10)
         inp = wait.until(EC.presence_of_element_located((by, value)))
         inp.clear()
-        inp.send_keys(f"#{keyword}")
+        self._human_type(inp, f"#{keyword}")
         self._log(f"  [2] typed #{keyword}")
 
     def _step3_click_tag_suggestion(self, driver, index: int) -> bool:
