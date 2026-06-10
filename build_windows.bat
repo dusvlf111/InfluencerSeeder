@@ -65,26 +65,26 @@ echo       Installed: !PYTHON_VERSION!
 
 :PYTHON_OK
 
-:: Require Python 3.10+ — PEP 604 union 문법(dict ^| None 등)은 3.10+ 에서만 런타임
-:: 평가된다. 3.9 이하면 빌드는 되지만 실행 시 TypeError 로 죽으므로 여기서 막는다.
-!PYTHON_CMD! -c "import sys; sys.exit(0 if sys.version_info[:2] >= (3,10) else 1)" > nul 2>&1
-if errorlevel 1 (
-    echo       Detected Python older than 3.10 - looking for 3.12/3.11/3.10 via py launcher...
-    set PYTHON_CMD=
-    for %%V in (3.12 3.11 3.10) do (
-        if not defined PYTHON_CMD (
-            py -%%V --version > nul 2>&1
-            if not errorlevel 1 set PYTHON_CMD=py -%%V
-        )
-    )
+rem --- Require Python 3.10+ (PEP 604 union syntax is evaluated at runtime) ---
+rem  Parse the version string in batch (no inline python with parens, which
+rem  would break cmd's block-paren counting and corrupt later lines).
+call :PYVER_OK "!PYTHON_VERSION!"
+if not errorlevel 1 goto :PYVER_DONE
+echo       Python is older than 3.10 - trying py launcher 3.12/3.11/3.10...
+set "PYTHON_CMD="
+for %%V in (3.12 3.11 3.10) do (
     if not defined PYTHON_CMD (
-        echo [ERROR] Python 3.10+ is required ^(found older version^).
-        echo         Install Python 3.12 from https://www.python.org/downloads/ and re-run.
-        goto :fail
+        py -%%V --version >nul 2>&1
+        if not errorlevel 1 set "PYTHON_CMD=py -%%V"
     )
-    for /f "tokens=*" %%v in ('!PYTHON_CMD! --version 2^>^&1') do set PYTHON_VERSION=%%v
-    echo       Using: !PYTHON_VERSION!  ^(!PYTHON_CMD!^)
 )
+if not defined PYTHON_CMD (
+    echo [ERROR] Python 3.10+ is required. Get it from https://www.python.org/downloads/
+    goto :fail
+)
+for /f "tokens=*" %%v in ('!PYTHON_CMD! --version 2^>^&1') do set "PYTHON_VERSION=%%v"
+echo       Using: !PYTHON_VERSION!
+:PYVER_DONE
 
 :: 수집은 임베디드 QtWebEngine(Chromium 내장) 브라우저에서 진행 — 시스템 Chrome 불필요.
 
@@ -93,9 +93,10 @@ if errorlevel 1 (
 :: -------------------------------------------------------
 echo.
 echo [2/5] Setting up virtual environment...
-:: 기존 venv 가 3.10 미만으로 만들어졌다면(과거 빌드 잔존) 폐기하고 다시 만든다.
+rem --- recreate venv if it was built with Python older than 3.10 ---
 if exist ".venv_win\Scripts\python.exe" (
-    .venv_win\Scripts\python.exe -c "import sys; sys.exit(0 if sys.version_info[:2] >= (3,10) else 1)" > nul 2>&1
+    for /f "tokens=*" %%v in ('.venv_win\Scripts\python.exe --version 2^>^&1') do set "_VENVVER=%%v"
+    call :PYVER_OK "!_VENVVER!"
     if errorlevel 1 (
         echo       Existing .venv_win is older than 3.10 - recreating.
         rmdir /s /q .venv_win
@@ -232,4 +233,19 @@ echo ============================================================
 echo.
 echo This window stays open so you can read the error.
 pause
+exit /b 1
+
+:PYVER_OK
+rem  arg1 = "Python X.Y.Z"  ->  exit /b 0 if version is 3.10+, else exit /b 1
+set "_NUM="
+set "_MAJ="
+set "_MIN="
+for /f "tokens=2 delims= " %%a in ("%~1") do set "_NUM=%%a"
+for /f "tokens=1,2 delims=." %%a in ("!_NUM!") do (
+    set "_MAJ=%%a"
+    set "_MIN=%%b"
+)
+if not defined _MIN exit /b 1
+if !_MAJ! GTR 3 exit /b 0
+if !_MAJ! EQU 3 if !_MIN! GEQ 10 exit /b 0
 exit /b 1
