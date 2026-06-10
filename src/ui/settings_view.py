@@ -86,13 +86,24 @@ class SettingsView(
         hl.addWidget(title)
         hl.addStretch()
 
-        btn_export = QPushButton("설정 내보내기")
+        btn_export = QPushButton("폴더로 내보내기")
+        btn_export.setToolTip("선택한 폴더에 설정 CSV들을 각각 저장")
         btn_export.clicked.connect(self._export_config)
         hl.addWidget(btn_export)
 
-        btn_import = QPushButton("설정 불러오기")
+        btn_export_file = QPushButton("파일로 내보내기")
+        btn_export_file.setToolTip("설정 전체를 단일 .zip 파일로 저장 (공유용)")
+        btn_export_file.clicked.connect(self._export_config_file)
+        hl.addWidget(btn_export_file)
+
+        btn_import = QPushButton("폴더에서 불러오기")
         btn_import.clicked.connect(self._import_config)
         hl.addWidget(btn_import)
+
+        btn_import_file = QPushButton("파일에서 불러오기")
+        btn_import_file.setToolTip(".zip 설정 파일에서 불러오기")
+        btn_import_file.clicked.connect(self._import_config_file)
+        hl.addWidget(btn_import_file)
 
         btn_save = QPushButton("Save All")
         btn_save.setObjectName("btnPrimary")

@@ -351,3 +351,23 @@ class TestConfigShare:
         empty.mkdir()
         imported = storage.import_config_from_dir(str(empty))
         assert imported == []
+
+    def test_export_then_import_zip_round_trip(self, view, tmp_path):
+        view.load()
+        view._save_all()
+        zip_path = tmp_path / "config.zip"
+        written = storage.export_config_to_zip(str(zip_path))
+        assert zip_path.exists()
+        assert "flow_steps.csv" in written
+        assert "selectors.csv" in written
+        # mutate flow then re-import from the exported zip
+        view._flow_reset()
+        view._flow_add_row()
+        view._save_all()
+        imported = storage.import_config_from_zip(str(zip_path))
+        assert "flow_steps.csv" in imported
+        view.load()
+        assert view._flow_table.rowCount() == len(storage.flow_steps_defaults())
+
+    def test_import_missing_zip_returns_nothing(self, tmp_path):
+        assert storage.import_config_from_zip(str(tmp_path / "nope.zip")) == []
