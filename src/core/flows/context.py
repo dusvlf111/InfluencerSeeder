@@ -18,6 +18,10 @@ class ScrapeContext:
     # Current loop indices (set by the Flow as it iterates).
     tag_index: int = 0
     post_index: int = 0
+    # Per-post working values (populated by Steps within the loop).
+    post_url: str = ""
+    profile_url: str = ""
+    profile_info: dict = field(default_factory=dict)
 
     # ── Delegating conveniences ────────────────────────────────────────────────
 

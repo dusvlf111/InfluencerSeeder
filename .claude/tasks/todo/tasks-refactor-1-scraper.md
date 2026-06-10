@@ -116,13 +116,13 @@ core/
         - [x] R1.3.T2 `pytest tests/test_flows.py -v` + 전체 `pytest tests/ -v` 통과.
         - [x] R1.3 커밋: `feat(flows): add Step/Flow abstraction + registry`
 
-    - [ ] R1.4 재사용 Step 구현 (`flows/steps.py`)
+    - [x] R1.4 재사용 Step 구현 (`flows/steps.py`)
         **작업 상세:** 현재 `_step1..6`/`_peek_username_from_post`/`_click_coord` 로직을 Step 클래스로 이전. 각 Step 은 `ctx.thread` 의 **역량 메서드**(`_resolve_selector`, `_get_by`, `_human_type`, `_should_skip`, `_random_delay`, `_is_blocked`, `_step`, `_log`)와 `ctx.driver` 만 사용. 파일 I/O 는 `core.storage`(append_result 등) 경유.
         구현 Step(예시 명): `OpenHomeIfNeeded`, `ClickSearchIcon`, `TypeSearch`, `ClickTagSuggestion`, `CollectPostUrls`, `PeekUsernameGate`(조기 dedup §6 — Outcome.SKIP_POST), `NavigateToProfile`, `ExtractProfile`, `ApplyFilters`(target.csv 필터, 탈락 시 seen 추가 + SKIP_POST), `SaveResult`(append_result dedup, result_signal, progress_signal, _save_state).
         `_click_coord` 는 thread 에 남겨도 되고 steps 의 헬퍼로 옮겨도 됨(테스트 없음). 좌표 폴백(`("coord",(x,y))`) 처리 유지.
         ⚠️ 기존 run() 의 **동작(로그 prefix `[1]`~`[6]`/`[skip]`/`[OK]`/`[grid]`, 신호 emit 순서, dedup/필터/저장 로직, source_tag/source_post_url 기록, collected 증가, _save_state(tag,post+1))을 그대로 보존**.
-        - [ ] R1.4.T1 `pytest tests/ -v` → 124 passed (run() 아직 미전환이면 step 클래스만 추가된 상태로 통과).
-        - [ ] R1.4 커밋: `feat(flows): reusable Step implementations for the 6-step pipeline`
+        - [x] R1.4.T1 `pytest tests/ -v` → 124 passed (run() 아직 미전환이면 step 클래스만 추가된 상태로 통과).
+        - [x] R1.4 커밋: `feat(flows): reusable Step implementations for the 6-step pipeline`
 
     - [ ] R1.5 `HashtagFlow` 구현 + `run()` 위임 전환
         **작업 상세:** `core/flows/hashtag.py` 에 `class HashtagFlow(Flow)`: `mode="hashtag"`. `run(ctx)` 가 현재 `core/scraper.py:run()` 의 **태그 루프 + 게시물 루프**(resume 인덱스, 조기 skip 게이트, 차단 감지, step별 save_state, dedup/필터/저장)를 steps 로 조립해 수행.
