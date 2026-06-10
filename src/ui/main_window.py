@@ -180,7 +180,14 @@ class MainWindow(QMainWindow):
         self._scraper.done_signal.connect(self._on_done)
         self._scraper.error_signal.connect(self._on_error)
         self._scraper.waiting_login_signal.connect(self._on_waiting_login)
+        self._scraper.login_ok_signal.connect(self._on_login_ok)
         self._scraper.start()
+
+    def _on_login_ok(self):
+        """로그인/홈 자동 확인됨 → 안내 배너 닫고 수집 상태로."""
+        self._results.hide_login_banner()
+        self._control.set_running(True, waiting_login=False)
+        self._results.set_status("수집 중...")
 
     def _login_done(self):
         if self._scraper:

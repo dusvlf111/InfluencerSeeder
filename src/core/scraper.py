@@ -53,6 +53,7 @@ class ScraperThread(QThread):
     done_signal          = pyqtSignal()
     error_signal         = pyqtSignal(str)
     waiting_login_signal = pyqtSignal()
+    login_ok_signal      = pyqtSignal()      # 로그인/홈 자동 확인됨 → 배너 닫기
     step_signal          = pyqtSignal(str)   # current step description for status bar
     skip_signal          = pyqtSignal(str)   # username skipped as duplicate (§6)
     blocked_signal       = pyqtSignal()      # block/challenge detected (§5)
@@ -306,6 +307,56 @@ class ScraperThread(QThread):
             return False
         return any(marker in url for marker in _BLOCKED_URL_MARKERS)
 
+    # ── Login / home detection ─────────────────────────────────────────────────
+
+    def _is_logged_in(self, driver) -> bool:
+        """True if Selenium Chrome is logged in (cookies injected from the embed)
+        and not sitting on a login/challenge page. Used instead of a manual
+        'Login Done' confirmation."""
+        try:
+            url = (driver.current_url or "").lower()
+        except Exception:
+            return False
+        if any(m in url for m in (
+            "/accounts/login", "/accounts/emailsignup", "/challenge",
+            "/accounts/suspended",
+        )):
+            return False
+        try:
+            from selenium.webdriver.common.by import By
+            # 로그인 폼(아이디/비번 입력)이 보이면 미로그인.
+            if driver.find_elements(
+                By.CSS_SELECTOR, "input[name='username'], input[name='password']"
+            ):
+                return False
+        except Exception:
+            pass
+        return True
+
+    def _dismiss_popups(self, driver):
+        """인스타가 띄우는 알림/로그인정보 저장 등 팝업을 닫는다('Not Now'/'나중에'
+        류 버튼 클릭). 클릭 가로채기(intercepted)의 원인이 되므로 수집 전/중 호출."""
+        from selenium.webdriver.common.by import By
+        labels = [
+            "Not Now", "Not now", "나중에 하기", "나중에", "닫기",
+            "취소", "Cancel", "Dismiss", "나중에 다시 알림",
+        ]
+        for lbl in labels:
+            try:
+                els = driver.find_elements(
+                    By.XPATH,
+                    f"//button[normalize-space(.)='{lbl}'] | //div[@role='button'][normalize-space(.)='{lbl}']",
+                )
+            except Exception:
+                continue
+            for el in els:
+                try:
+                    if el.is_displayed():
+                        el.click()
+                        self._log(f"  [popup] 닫음: {lbl}")
+                except Exception:
+                    pass
+
     # ── Dedup gate (§6) ───────────────────────────────────────────────────────
 
     @staticmethod
@@ -370,17 +421,36 @@ class ScraperThread(QThread):
 
             driver.get("https://www.instagram.com/")
             time.sleep(3)
+            self._dismiss_popups(driver)
 
-            self._log("[wait] Log in to Instagram, then click Login Done.")
-            self._waiting_login = True
-            self.waiting_login_signal.emit()
-            while self._waiting_login and not self._stop:
-                time.sleep(1)
+            # 수동 'Login Done' 확인을 없앤다. 임베디드 브라우저에서 미리 로그인한
+            # 세션 쿠키가 주입돼 있으면 보통 이미 로그인 상태 → 바로 진행.
+            # 아니면 사용자에게 "로그인 후 홈 이동 + 팝업 닫기"를 안내하고 자동
+            # 감지될 때까지 폴링한다(버튼 클릭 불필요).
+            if self._is_logged_in(driver):
+                self._log("[OK] 로그인 확인 — 홈에서 수집을 시작합니다.")
+                self.login_ok_signal.emit()
+            else:
+                self._log(
+                    "[wait] 브라우저에서 로그인하고 홈 화면으로 이동한 뒤, "
+                    "모든 팝업(알림/로그인정보 저장 등)을 닫아주세요."
+                )
+                self._waiting_login = True
+                self.waiting_login_signal.emit()
+                while self._waiting_login and not self._stop:
+                    self._dismiss_popups(driver)
+                    if self._is_logged_in(driver):
+                        self._waiting_login = False
+                        self._log("[OK] 로그인 확인 — 홈에서 수집을 시작합니다.")
+                        self.login_ok_signal.emit()
+                        break
+                    time.sleep(2)
 
             if self._stop:
                 return
 
-            time.sleep(2)
+            self._dismiss_popups(driver)
+            time.sleep(1)
 
             # Build excluded set (UI list + CSV file)
             from core import storage
