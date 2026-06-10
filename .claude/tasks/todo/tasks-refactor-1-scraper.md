@@ -90,7 +90,7 @@ core/
         - [x] R1.2.T1 `pytest tests/ -v` → 124 passed (특히 `TestStealth` 10개, import 라인).
         - [x] R1.2 커밋: `refactor(scraper): extract driver/stealth to scraper_driver.py`
 
-    - [ ] R1.3 `flows/` 추상화 골격 (base + context + 레지스트리)
+    - [x] R1.3 `flows/` 추상화 골격 (base + context + 레지스트리)
         **작업 상세:**
         `core/flows/base.py`:
         ```python
@@ -112,9 +112,9 @@ core/
         ```
         `core/flows/context.py`: `@dataclass` `ScrapeContext` — `thread`, `driver`, `keyword: str = ""`, `tag_grid_url: str = ""`, `post_urls: list = field(default_factory=list)`. 편의 프로퍼티 `collected`(→`thread._collected`) 등은 thread 위임.
         `core/flows/__init__.py`: `_REGISTRY: dict[str, type] = {}`; `register(mode, cls)`; `get_flow(mode) -> Flow`(미등록 mode 는 기본 `"hashtag"` 로 폴백 + 로그). 모듈 하단에서 `from core.flows.hashtag import HashtagFlow; register("hashtag", HashtagFlow); register("keyword", HashtagFlow)`.
-        - [ ] R1.3.T1 `tests/test_flows.py` 신규 (`class TestFlowRegistry`): `get_flow("hashtag")` 가 `HashtagFlow` 인스턴스, 미등록 mode 폴백, `Step`/`Flow` 추상 인스턴스화 시 `TypeError`.
-        - [ ] R1.3.T2 `pytest tests/test_flows.py -v` + 전체 `pytest tests/ -v` 통과.
-        - [ ] R1.3 커밋: `feat(flows): add Step/Flow abstraction + registry`
+        - [x] R1.3.T1 `tests/test_flows.py` 신규 (`class TestFlowRegistry`): `get_flow("hashtag")` 가 `HashtagFlow` 인스턴스, 미등록 mode 폴백, `Step`/`Flow` 추상 인스턴스화 시 `TypeError`.
+        - [x] R1.3.T2 `pytest tests/test_flows.py -v` + 전체 `pytest tests/ -v` 통과.
+        - [x] R1.3 커밋: `feat(flows): add Step/Flow abstraction + registry`
 
     - [ ] R1.4 재사용 Step 구현 (`flows/steps.py`)
         **작업 상세:** 현재 `_step1..6`/`_peek_username_from_post`/`_click_coord` 로직을 Step 클래스로 이전. 각 Step 은 `ctx.thread` 의 **역량 메서드**(`_resolve_selector`, `_get_by`, `_human_type`, `_should_skip`, `_random_delay`, `_is_blocked`, `_step`, `_log`)와 `ctx.driver` 만 사용. 파일 I/O 는 `core.storage`(append_result 등) 경유.
