@@ -135,7 +135,7 @@ _start_spinner "Upgrading pip"
 $VENV_PY -m pip install --upgrade pip > /tmp/pip_install.log 2>&1 || true
 _stop_spinner
 
-_start_spinner "Installing requirements.txt (PyQt6, PyQt6-WebEngine, selenium, ...)"
+_start_spinner "Installing requirements.txt (PyQt6, PyQt6-WebEngine)"
 $VENV_PY -m pip install -r requirements.txt >> /tmp/pip_install.log 2>&1 || {
     _stop_spinner
     echo "[ERROR] Failed to install requirements.txt. See /tmp/pip_install.log"

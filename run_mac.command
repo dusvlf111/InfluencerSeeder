@@ -53,7 +53,7 @@ if [ ! -x "$VENV_PY" ]; then
     "$VENV_PY" -m pip install --upgrade pip --quiet >> "$LOG" 2>&1
     "$VENV_PY" -m pip install -r requirements.txt --quiet >> "$LOG" 2>&1
 else
-    if ! "$VENV_PY" -c "import PyQt6, selenium, webdriver_manager" &>/dev/null; then
+    if ! "$VENV_PY" -c "import PyQt6; from PyQt6.QtWebEngineWidgets import QWebEngineView" &>/dev/null; then
         echo "[2/3] Installing missing dependencies..."
         "$VENV_PY" -m pip install -r requirements.txt --quiet >> "$LOG" 2>&1
     else

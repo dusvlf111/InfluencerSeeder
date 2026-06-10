@@ -96,7 +96,7 @@ echo.
 
 %VENV_PY% -m pip install --upgrade pip --no-warn-script-location >> "%LOGFILE%" 2>&1
 
-echo       Installing from requirements.txt (PyQt6, PyQt6-WebEngine, selenium, ...)...
+echo       Installing from requirements.txt (PyQt6, PyQt6-WebEngine)...
 %VENV_PY% -m pip install -r requirements.txt --no-warn-script-location >> "%LOGFILE%" 2>&1
 if errorlevel 1 (
     echo [ERROR] Failed to install requirements.txt

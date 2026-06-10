@@ -60,8 +60,8 @@ if not exist "%VENV_PY%" (
         goto :fail
     )
 ) else (
-    :: Check that Qt runtime is actually loadable (not just namespace package)
-    "%VENV_PY%" -c "from PyQt6.QtWidgets import QApplication; import selenium, webdriver_manager" > nul 2>&1
+    :: Check that the Qt + WebEngine runtime is actually loadable
+    "%VENV_PY%" -c "from PyQt6.QtWidgets import QApplication; from PyQt6.QtWebEngineWidgets import QWebEngineView" > nul 2>&1
     if errorlevel 1 (
         echo [2/3] Installing missing dependencies...
         "%VENV_PY%" -m pip install -r requirements.txt --no-warn-script-location >> "%LOGFILE%" 2>&1
