@@ -92,11 +92,11 @@
         - [x] 1.3.T1 pytest 테스트 (`class TestDelays`): defaults 반환·생성, round-trip, tuple 형태 검증, 누락 키 머지, 손상 파일 시 defaults.
         - [x] 1.3.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestDelays -v` 실행 및 검증
 
-    - [ ] 1.4 flow.csv — `load_flow()` / `save_flow(dict)`
+    - [x] 1.4 flow.csv — `load_flow()` / `save_flow(dict)`
         **작업 상세:** §2.4 스키마(key,value). `_FLOW_DEFAULTS`: `max_tags=3, tag_start_index=0, posts_per_tag=5, scroll_max_attempts=15, skip_visited_profile=true, stop_on_consecutive_miss=10`. load/save 는 1.1 web 과 동일 패턴, `_coerce` 적용.
         **참조:** PRD §2.4
-        - [ ] 1.4.T1 pytest 테스트 (`class TestFlow`): defaults 반환·생성, round-trip, 누락 키 머지, 손상 파일 시 defaults.
-        - [ ] 1.4.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestFlow -v` 실행 및 검증
+        - [x] 1.4.T1 pytest 테스트 (`class TestFlow`): defaults 반환·생성, round-trip, 누락 키 머지, 손상 파일 시 defaults.
+        - [x] 1.4.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestFlow -v` 실행 및 검증
 
     - [ ] 1.5 target.csv — `load_target()` / `save_target(dict)`
         **작업 상세:** §2.5 스키마(key,value). `_TARGET_DEFAULTS`: `min_followers=0, max_followers=0, min_following=0, max_following=0, min_posts=0, keyword=(빈값), mode=hashtag`. load/save 동일 패턴.
