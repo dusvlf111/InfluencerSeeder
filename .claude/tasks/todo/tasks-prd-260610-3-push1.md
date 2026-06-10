@@ -85,12 +85,12 @@
         - [x] 1.2.T1 pytest 테스트 (`class TestSelectors`): defaults 반환·파일 생성, priority 오름차순 정렬 검증, round-trip(새 필드), priority 결측 시 보정, 손상 파일 시 defaults.
         - [x] 1.2.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestSelectors -v` 실행 및 검증
 
-    - [ ] 1.3 delays.csv — `load_delays()` / `save_delays(dict)`
+    - [x] 1.3 delays.csv — `load_delays()` / `save_delays(dict)`
         **작업 상세:** §2.3 스키마(step_id,delay_min,delay_max). `_DELAY_DEFAULTS` 에 `step1~step6, back, scroll, typing_char` 의 (min,max) 정의(PRD 값 그대로).
         `load_delays() -> dict[str, tuple[float,float]]` (예: `{"step1": (1.0, 2.5), ...}`). 파일 없으면 defaults 기록 후 반환. `save_delays(dict)` 는 step_id,delay_min,delay_max 헤더로 기록. 손상/누락 시 해당 키는 defaults 로 머지.
         **참조:** PRD §2.3
-        - [ ] 1.3.T1 pytest 테스트 (`class TestDelays`): defaults 반환·생성, round-trip, tuple 형태 검증, 누락 키 머지, 손상 파일 시 defaults.
-        - [ ] 1.3.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestDelays -v` 실행 및 검증
+        - [x] 1.3.T1 pytest 테스트 (`class TestDelays`): defaults 반환·생성, round-trip, tuple 형태 검증, 누락 키 머지, 손상 파일 시 defaults.
+        - [x] 1.3.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestDelays -v` 실행 및 검증
 
     - [ ] 1.4 flow.csv — `load_flow()` / `save_flow(dict)`
         **작업 상세:** §2.4 스키마(key,value). `_FLOW_DEFAULTS`: `max_tags=3, tag_start_index=0, posts_per_tag=5, scroll_max_attempts=15, skip_visited_profile=true, stop_on_consecutive_miss=10`. load/save 는 1.1 web 과 동일 패턴, `_coerce` 적용.
