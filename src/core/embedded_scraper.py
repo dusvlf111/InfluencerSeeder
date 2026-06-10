@@ -572,10 +572,12 @@ class EmbeddedScraper(QObject):
         self._after("step2", self._do_type)
 
     def _do_type(self):
-        self._step(f"검색어 입력: #{self._cur_keyword}")
+        # 해시태그 모드는 '#키워드', 캡션 키워드 모드는 '#' 없이 키워드만 입력.
+        text = (f"#{self._cur_keyword}" if self.mode == "hashtag"
+                else self._cur_keyword)
+        self._step(f"검색어 입력: {text}")
         cands = self._cands("search_input")
-        self._js(build_type_js(cands, f"#{self._cur_keyword}"),
-                 lambda ok: self._after_type(ok))
+        self._js(build_type_js(cands, text), lambda ok: self._after_type(ok))
 
     def _after_type(self, ok):
         if not ok:
