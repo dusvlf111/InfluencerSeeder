@@ -15,33 +15,35 @@ class FlowTabMixin:
         self._fl_max_tags = QSpinBox()
         self._fl_max_tags.setRange(1, 50)
         self._fl_max_tags.setToolTip(
-            "How many tag suggestions to cycle through.\n"
-            "Search is re-run for each subsequent suggestion."
+            "쉼표로 키워드를 여러 개 입력하면 각 키워드가 하나의 태그로 검색됩니다.\n"
+            "이 값은 키워드 검색 방식에선 사용되지 않습니다(하위호환 유지)."
         )
-        form.addRow("Max tag suggestions", self._fl_max_tags)
+        form.addRow("최대 태그 수(레거시)", self._fl_max_tags)
 
         self._fl_tag_start_index = QSpinBox()
         self._fl_tag_start_index.setRange(0, 49)
-        form.addRow("Tag start index", self._fl_tag_start_index)
+        form.addRow("시작 태그 인덱스", self._fl_tag_start_index)
 
         self._fl_posts_per_tag = QSpinBox()
         self._fl_posts_per_tag.setRange(1, 200)
-        self._fl_posts_per_tag.setToolTip("Posts to collect per tag suggestion")
-        form.addRow("Posts per tag", self._fl_posts_per_tag)
+        self._fl_posts_per_tag.setToolTip(
+            "키워드 1개당 수집할 게시물 수. 이만큼 모으면 다음 키워드로 넘어감"
+        )
+        form.addRow("태그(키워드)당 게시물 수", self._fl_posts_per_tag)
 
         self._fl_scroll_max_attempts = QSpinBox()
         self._fl_scroll_max_attempts.setRange(0, 200)
-        form.addRow("Scroll max attempts", self._fl_scroll_max_attempts)
+        form.addRow("그리드 최대 스크롤", self._fl_scroll_max_attempts)
 
-        self._fl_skip_visited_profile = QCheckBox("Skip profiles already collected")
-        form.addRow("Skip visited profile", self._fl_skip_visited_profile)
+        self._fl_skip_visited_profile = QCheckBox("이미 수집한 프로필 건너뛰기")
+        form.addRow("방문한 프로필 건너뛰기", self._fl_skip_visited_profile)
 
         self._fl_stop_on_consecutive_miss = QSpinBox()
         self._fl_stop_on_consecutive_miss.setRange(0, 1000)
         self._fl_stop_on_consecutive_miss.setToolTip(
-            "Stop a tag after this many consecutive duplicate/filtered posts (0 = never)."
+            "연속으로 중복/필터 제외된 게시물이 이 수만큼 나오면 해당 태그를 중단(0 = 사용 안 함)."
         )
-        form.addRow("Stop on consecutive miss", self._fl_stop_on_consecutive_miss)
+        form.addRow("연속 미수집 시 중단", self._fl_stop_on_consecutive_miss)
 
         return w
 
