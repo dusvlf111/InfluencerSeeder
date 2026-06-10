@@ -8,27 +8,46 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox, QTextEdit, QFrame, QMessageBox,
     QTabWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QLineEdit,
+    QComboBox, QCheckBox,
 )
 
 import core.storage as storage
 
+# step_id → human label (시간텀 탭). load_delays() 의 {step_id:(min,max)} 키와 일치.
 _DELAY_STEPS = [
-    ("step1", "Step 1 — Click Search Icon"),
-    ("step2", "Step 2 — Type Hashtag"),
-    ("step3", "Step 3 — Select Tag Suggestion"),
-    ("step4", "Step 4 — Open Post"),
-    ("step5", "Step 5 — Navigate to Profile"),
-    ("step6", "Step 6 — Save Profile Data"),
-    ("back",  "Return to Tag Grid"),
+    ("step1",       "Step 1 — Click Search Icon"),
+    ("step2",       "Step 2 — Type Hashtag"),
+    ("step3",       "Step 3 — Select Tag Suggestion"),
+    ("step4",       "Step 4 — Open Post"),
+    ("step5",       "Step 5 — Navigate to Profile"),
+    ("step6",       "Step 6 — Save Profile Data"),
+    ("back",        "Return to Tag Grid"),
+    ("scroll",      "Scroll (per scroll)"),
+    ("typing_char", "Typing (per character)"),
 ]
+
+_BROWSERS = ["chrome", "edge", "firefox"]
+_MODES = ["hashtag", "keyword"]
+
+
+def _as_bool(v) -> bool:
+    """storage 의 bool 값은 문자열('true'/'false')로 로드된다 — 통일 해석."""
+    return str(v).strip().lower() == "true"
 
 
 class SettingsView(QWidget):
     back_requested = pyqtSignal()
+    imported = pyqtSignal()  # Import 완료 시 메인뷰 재로딩용(flow-builder/Push4 연결)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._settings: dict = {}
+        self._web: dict = {}
+        self._delays: dict = {}
+        self._flow: dict = {}
+        self._target: dict = {}
+        self._selectors: list = []
+        self._excluded: list = []
         self._process: QProcess | None = None
         self._build_ui()
 
@@ -37,6 +56,10 @@ class SettingsView(QWidget):
     def load(self):
         """Read all CSV files and populate UI fields."""
         self._settings  = storage.load_settings()
+        self._web       = storage.load_web()
+        self._delays    = storage.load_delays()
+        self._flow      = storage.load_flow()
+        self._target    = storage.load_target()
         self._selectors = storage.load_selectors()
         self._excluded  = storage.load_excluded()
         self._populate()
@@ -71,49 +94,68 @@ class SettingsView(QWidget):
 
         root.addWidget(header)
 
-        # Tab widget
+        # Tab widget — 기본 설정 그룹 탭 (웹/시간텀/플로우/타겟/제외) + 기존 Selectors 유지.
+        # ⚠️ Selectors 탭은 flow-builder(P3)가 카드형으로 교체 예정 — 여기서 손대지 않는다.
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_collection_tab(), "Collection")
-        self._tabs.addTab(self._build_delays_tab(),     "Delays")
-        self._tabs.addTab(self._build_selectors_tab(),  "Selectors")
-        self._tabs.addTab(self._build_excluded_tab(),   "Excluded")
-        self._tabs.addTab(self._build_deps_tab(),       "Dependencies")
+        self._tabs.addTab(self._build_web_tab(),       "Web")
+        self._tabs.addTab(self._build_delays_tab(),    "Delays")
+        self._tabs.addTab(self._build_flow_tab(),      "Flow")
+        self._tabs.addTab(self._build_target_tab(),    "Target")
+        self._tabs.addTab(self._build_excluded_tab(),  "Excluded")
+        self._tabs.addTab(self._build_selectors_tab(), "Selectors")
+        self._tabs.addTab(self._build_deps_tab(),      "Dependencies")
         root.addWidget(self._tabs)
 
-    # ── Tab: Collection ───────────────────────────────────────────────────────
+    # ── Tab: Web (§2.1) ────────────────────────────────────────────────────────
 
-    def _build_collection_tab(self) -> QWidget:
+    def _build_web_tab(self) -> QWidget:
         w = QWidget()
         form = QFormLayout(w)
         form.setSpacing(12)
         form.setContentsMargins(28, 20, 28, 20)
 
-        self._f_min_followers = QSpinBox()
-        self._f_min_followers.setRange(0, 10_000_000)
-        self._f_min_followers.setSingleStep(1000)
-        form.addRow("Min followers (0 = no limit)", self._f_min_followers)
+        self._w_browser = QComboBox()
+        self._w_browser.addItems(_BROWSERS)
+        form.addRow("Browser", self._w_browser)
 
-        self._f_max_followers = QSpinBox()
-        self._f_max_followers.setRange(0, 10_000_000)
-        self._f_max_followers.setSingleStep(1000)
-        form.addRow("Max followers (0 = no limit)", self._f_max_followers)
+        self._w_headless = QCheckBox("Run browser without a window")
+        form.addRow("Headless", self._w_headless)
 
-        self._f_posts_per_tag = QSpinBox()
-        self._f_posts_per_tag.setRange(1, 100)
-        self._f_posts_per_tag.setToolTip("Posts to collect per tag suggestion")
-        form.addRow("Posts per tag", self._f_posts_per_tag)
+        self._w_window_width = QSpinBox()
+        self._w_window_width.setRange(320, 7680)
+        self._w_window_width.setSingleStep(10)
+        form.addRow("Window width", self._w_window_width)
 
-        self._f_max_tags = QSpinBox()
-        self._f_max_tags.setRange(1, 20)
-        self._f_max_tags.setToolTip(
-            "How many tag suggestions to cycle through.\n"
-            "Search is re-run for each subsequent suggestion."
-        )
-        form.addRow("Max tag suggestions", self._f_max_tags)
+        self._w_window_height = QSpinBox()
+        self._w_window_height.setRange(320, 4320)
+        self._w_window_height.setSingleStep(10)
+        form.addRow("Window height", self._w_window_height)
+
+        self._w_randomize_window = QCheckBox("Randomize window size per run")
+        form.addRow("Randomize window", self._w_randomize_window)
+
+        self._w_randomize_user_agent = QCheckBox("Randomize user agent per run")
+        form.addRow("Randomize user agent", self._w_randomize_user_agent)
+
+        self._w_user_data_dir = QLineEdit()
+        self._w_user_data_dir.setPlaceholderText("(blank = temporary profile)")
+        form.addRow("User data dir", self._w_user_data_dir)
+
+        self._w_locale = QLineEdit()
+        self._w_locale.setPlaceholderText("ko-KR")
+        form.addRow("Locale", self._w_locale)
+
+        self._w_implicit_wait = QSpinBox()
+        self._w_implicit_wait.setRange(0, 120)
+        form.addRow("Implicit wait (sec)", self._w_implicit_wait)
+
+        self._w_page_load_timeout = QSpinBox()
+        self._w_page_load_timeout.setRange(0, 600)
+        form.addRow("Page load timeout (sec)", self._w_page_load_timeout)
 
         return w
 
-    # ── Tab: Delays ───────────────────────────────────────────────────────────
+    # ── Tab: Delays (시간텀, §2.3) ─────────────────────────────────────────────
 
     def _build_delays_tab(self) -> QWidget:
         w = QWidget()
@@ -154,7 +196,91 @@ class SettingsView(QWidget):
         layout.addWidget(self._delay_table)
         return w
 
-    # ── Tab: Selectors ────────────────────────────────────────────────────────
+    # ── Tab: Flow (§2.4) ───────────────────────────────────────────────────────
+
+    def _build_flow_tab(self) -> QWidget:
+        w = QWidget()
+        form = QFormLayout(w)
+        form.setSpacing(12)
+        form.setContentsMargins(28, 20, 28, 20)
+
+        self._fl_max_tags = QSpinBox()
+        self._fl_max_tags.setRange(1, 50)
+        self._fl_max_tags.setToolTip(
+            "How many tag suggestions to cycle through.\n"
+            "Search is re-run for each subsequent suggestion."
+        )
+        form.addRow("Max tag suggestions", self._fl_max_tags)
+
+        self._fl_tag_start_index = QSpinBox()
+        self._fl_tag_start_index.setRange(0, 49)
+        form.addRow("Tag start index", self._fl_tag_start_index)
+
+        self._fl_posts_per_tag = QSpinBox()
+        self._fl_posts_per_tag.setRange(1, 200)
+        self._fl_posts_per_tag.setToolTip("Posts to collect per tag suggestion")
+        form.addRow("Posts per tag", self._fl_posts_per_tag)
+
+        self._fl_scroll_max_attempts = QSpinBox()
+        self._fl_scroll_max_attempts.setRange(0, 200)
+        form.addRow("Scroll max attempts", self._fl_scroll_max_attempts)
+
+        self._fl_skip_visited_profile = QCheckBox("Skip profiles already collected")
+        form.addRow("Skip visited profile", self._fl_skip_visited_profile)
+
+        self._fl_stop_on_consecutive_miss = QSpinBox()
+        self._fl_stop_on_consecutive_miss.setRange(0, 1000)
+        self._fl_stop_on_consecutive_miss.setToolTip(
+            "Stop a tag after this many consecutive duplicate/filtered posts (0 = never)."
+        )
+        form.addRow("Stop on consecutive miss", self._fl_stop_on_consecutive_miss)
+
+        return w
+
+    # ── Tab: Target (§2.5) ─────────────────────────────────────────────────────
+
+    def _build_target_tab(self) -> QWidget:
+        w = QWidget()
+        form = QFormLayout(w)
+        form.setSpacing(12)
+        form.setContentsMargins(28, 20, 28, 20)
+
+        self._t_min_followers = QSpinBox()
+        self._t_min_followers.setRange(0, 100_000_000)
+        self._t_min_followers.setSingleStep(1000)
+        form.addRow("Min followers (0 = no limit)", self._t_min_followers)
+
+        self._t_max_followers = QSpinBox()
+        self._t_max_followers.setRange(0, 100_000_000)
+        self._t_max_followers.setSingleStep(1000)
+        form.addRow("Max followers (0 = no limit)", self._t_max_followers)
+
+        self._t_min_following = QSpinBox()
+        self._t_min_following.setRange(0, 100_000_000)
+        self._t_min_following.setSingleStep(100)
+        form.addRow("Min following (0 = no limit)", self._t_min_following)
+
+        self._t_max_following = QSpinBox()
+        self._t_max_following.setRange(0, 100_000_000)
+        self._t_max_following.setSingleStep(100)
+        form.addRow("Max following (0 = no limit)", self._t_max_following)
+
+        self._t_min_posts = QSpinBox()
+        self._t_min_posts.setRange(0, 1_000_000)
+        form.addRow("Min posts (0 = no limit)", self._t_min_posts)
+
+        self._t_keyword = QLineEdit()
+        self._t_keyword.setPlaceholderText("hashtag or keyword to search")
+        form.addRow("Keyword", self._t_keyword)
+
+        self._t_mode = QComboBox()
+        self._t_mode.addItems(_MODES)
+        form.addRow("Mode", self._t_mode)
+
+        return w
+
+    # ── Tab: Selectors ──────────────────────────────────────────────────────────
+    # ⚠️ flow-builder(P3) 영역 — 구조/collect/save 를 변경하지 말 것.
 
     def _build_selectors_tab(self) -> QWidget:
         w = QWidget()
@@ -245,27 +371,58 @@ class SettingsView(QWidget):
         layout.addStretch()
         return w
 
-    # ── Populate / collect ────────────────────────────────────────────────────
+    # ── Populate (그룹별) ───────────────────────────────────────────────────────
 
     def _populate(self):
-        s = self._settings
+        self._populate_web(self._web)
+        self._populate_delays(self._delays)
+        self._populate_flow(self._flow)
+        self._populate_target(self._target)
+        self._populate_selectors(self._selectors)
+        self._populate_excluded(self._excluded)
 
-        # Collection tab
-        self._f_min_followers.setValue(int(s.get("min_followers", 0)))
-        self._f_max_followers.setValue(int(s.get("max_followers", 0)))
-        self._f_posts_per_tag.setValue(int(s.get("posts_per_tag", 5)))
-        self._f_max_tags.setValue(int(s.get("max_tags", 3)))
+    def _populate_web(self, web: dict):
+        browser = str(web.get("browser", "chrome"))
+        idx = self._w_browser.findText(browser)
+        self._w_browser.setCurrentIndex(idx if idx >= 0 else 0)
+        self._w_headless.setChecked(_as_bool(web.get("headless", "false")))
+        self._w_window_width.setValue(int(web.get("window_width", 1280)))
+        self._w_window_height.setValue(int(web.get("window_height", 900)))
+        self._w_randomize_window.setChecked(_as_bool(web.get("randomize_window", "true")))
+        self._w_randomize_user_agent.setChecked(_as_bool(web.get("randomize_user_agent", "true")))
+        self._w_user_data_dir.setText(str(web.get("user_data_dir", "") or ""))
+        self._w_locale.setText(str(web.get("locale", "ko-KR")))
+        self._w_implicit_wait.setValue(int(web.get("implicit_wait", 5)))
+        self._w_page_load_timeout.setValue(int(web.get("page_load_timeout", 30)))
 
-        # Delays tab
+    def _populate_delays(self, delays: dict):
         for row, (key, _) in enumerate(_DELAY_STEPS):
-            min_val = str(s.get(f"{key}_delay_min", "1.0"))
-            max_val = str(s.get(f"{key}_delay_max", "2.0"))
-            self._delay_table.item(row, 1).setText(min_val)
-            self._delay_table.item(row, 2).setText(max_val)
+            lo, hi = delays.get(key, (1.0, 2.0))
+            self._delay_table.item(row, 1).setText(str(lo))
+            self._delay_table.item(row, 2).setText(str(hi))
 
-        # Selectors tab
+    def _populate_flow(self, flow: dict):
+        self._fl_max_tags.setValue(int(flow.get("max_tags", 3)))
+        self._fl_tag_start_index.setValue(int(flow.get("tag_start_index", 0)))
+        self._fl_posts_per_tag.setValue(int(flow.get("posts_per_tag", 5)))
+        self._fl_scroll_max_attempts.setValue(int(flow.get("scroll_max_attempts", 15)))
+        self._fl_skip_visited_profile.setChecked(_as_bool(flow.get("skip_visited_profile", "true")))
+        self._fl_stop_on_consecutive_miss.setValue(int(flow.get("stop_on_consecutive_miss", 10)))
+
+    def _populate_target(self, target: dict):
+        self._t_min_followers.setValue(int(target.get("min_followers", 0)))
+        self._t_max_followers.setValue(int(target.get("max_followers", 0)))
+        self._t_min_following.setValue(int(target.get("min_following", 0)))
+        self._t_max_following.setValue(int(target.get("max_following", 0)))
+        self._t_min_posts.setValue(int(target.get("min_posts", 0)))
+        self._t_keyword.setText(str(target.get("keyword", "") or ""))
+        mode = str(target.get("mode", "hashtag"))
+        idx = self._t_mode.findText(mode)
+        self._t_mode.setCurrentIndex(idx if idx >= 0 else 0)
+
+    def _populate_selectors(self, selectors: list):
         self._sel_table.setRowCount(0)
-        for row_data in self._selectors:
+        for row_data in selectors:
             r = self._sel_table.rowCount()
             self._sel_table.insertRow(r)
             step_id_item = QTableWidgetItem(row_data.get("step_id", ""))
@@ -275,26 +432,66 @@ class SettingsView(QWidget):
             self._sel_table.setItem(r, 2, QTableWidgetItem(row_data.get("selector_type", "xpath")))
             self._sel_table.setItem(r, 3, QTableWidgetItem(row_data.get("selector_value", "")))
 
-        # Excluded tab
+    def _populate_excluded(self, excluded: list):
         self._excl_table.setRowCount(0)
-        for username in self._excluded:
+        for username in excluded:
             r = self._excl_table.rowCount()
             self._excl_table.insertRow(r)
             self._excl_table.setItem(r, 0, QTableWidgetItem(username))
 
-    def _collect_settings(self) -> dict:
-        s = dict(self._settings)
-        s["min_followers"] = self._f_min_followers.value()
-        s["max_followers"] = self._f_max_followers.value()
-        s["posts_per_tag"] = self._f_posts_per_tag.value()
-        s["max_tags"]      = self._f_max_tags.value()
+    # ── Collect (그룹별) ────────────────────────────────────────────────────────
+
+    def _collect_web(self) -> dict:
+        return {
+            "browser":              self._w_browser.currentText(),
+            "headless":             "true" if self._w_headless.isChecked() else "false",
+            "window_width":         self._w_window_width.value(),
+            "window_height":        self._w_window_height.value(),
+            "randomize_window":     "true" if self._w_randomize_window.isChecked() else "false",
+            "randomize_user_agent": "true" if self._w_randomize_user_agent.isChecked() else "false",
+            "user_data_dir":        self._w_user_data_dir.text().strip(),
+            "locale":               self._w_locale.text().strip() or "ko-KR",
+            "implicit_wait":        self._w_implicit_wait.value(),
+            "page_load_timeout":    self._w_page_load_timeout.value(),
+        }
+
+    def _collect_delays(self) -> dict:
+        """Return {step_id: (min, max)}; bad cells fall back to defaults."""
+        defaults = storage.delay_defaults()
+        result: dict = {}
         for row, (key, _) in enumerate(_DELAY_STEPS):
+            base = defaults.get(key, (0.0, 0.0))
             try:
-                s[f"{key}_delay_min"] = float(self._delay_table.item(row, 1).text())
-                s[f"{key}_delay_max"] = float(self._delay_table.item(row, 2).text())
+                lo = float(self._delay_table.item(row, 1).text())
             except (ValueError, AttributeError):
-                pass
-        return s
+                lo = base[0]
+            try:
+                hi = float(self._delay_table.item(row, 2).text())
+            except (ValueError, AttributeError):
+                hi = base[1]
+            result[key] = (lo, hi)
+        return result
+
+    def _collect_flow(self) -> dict:
+        return {
+            "max_tags":                 self._fl_max_tags.value(),
+            "tag_start_index":          self._fl_tag_start_index.value(),
+            "posts_per_tag":            self._fl_posts_per_tag.value(),
+            "scroll_max_attempts":      self._fl_scroll_max_attempts.value(),
+            "skip_visited_profile":     "true" if self._fl_skip_visited_profile.isChecked() else "false",
+            "stop_on_consecutive_miss": self._fl_stop_on_consecutive_miss.value(),
+        }
+
+    def _collect_target(self) -> dict:
+        return {
+            "min_followers": self._t_min_followers.value(),
+            "max_followers": self._t_max_followers.value(),
+            "min_following": self._t_min_following.value(),
+            "max_following": self._t_max_following.value(),
+            "min_posts":     self._t_min_posts.value(),
+            "keyword":       self._t_keyword.text().strip(),
+            "mode":          self._t_mode.currentText(),
+        }
 
     def _collect_selectors(self) -> list[dict]:
         rows = []
@@ -321,9 +518,13 @@ class SettingsView(QWidget):
 
     def _save_all(self):
         try:
-            storage.save_settings(self._collect_settings())
-            storage.save_selectors(self._collect_selectors())
+            storage.save_web(self._collect_web())
+            storage.save_delays(self._collect_delays())
+            storage.save_flow(self._collect_flow())
+            storage.save_target(self._collect_target())
             storage.save_excluded(self._collect_excluded())
+            # 셀렉터/레거시 settings 는 기존 동작 유지 (flow-builder 영역).
+            storage.save_selectors(self._collect_selectors())
             self.back_requested.emit()
         except Exception as exc:
             QMessageBox.critical(self, "Save failed", str(exc))

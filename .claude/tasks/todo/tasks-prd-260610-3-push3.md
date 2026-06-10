@@ -1,9 +1,14 @@
-# Tasks: InfluencerSeeder v3 - Push 3 (설정 UI 6탭 재편 + Import/Export + 셀렉터 테스트)
+# Tasks: InfluencerSeeder v3 - Push 3 (설정 UI 기본 탭 — 웹/시간텀/플로우/타겟/제외)
 
-> PRD: `.claude/tasks/prd-260610-3.md` (§2 설정 5그룹, §7 공유, §9 `ui/settings_view.py`)
-> Push 범위: `ui/settings_view.py` QTabWidget 6탭(웹/버튼매핑/시간텀/플로우/타겟/제외) + 행 추가·삭제·priority 정렬 + [셀렉터 테스트] + [설정 불러오기]/[설정 내보내기]
+> PRD: `.claude/tasks/prd-260610-3.md` (§2 설정 5그룹, §9 `ui/settings_view.py`)
+> Push 범위: `ui/settings_view.py` QTabWidget **기본 4탭(웹/시간텀/플로우/타겟) + 제외 탭** + populate/collect/save_all 배선.
 > 상태: 🔲 진행 중
-> 선행: **Push 1 완료 필수** (storage `load_web/load_selectors/load_delays/load_flow/load_target/save_*`). Push 2 와 독립이나 권장 순서상 2 이후.
+> 선행: **Push 1 완료 필수** (storage `load_web/load_delays/load_flow/load_target/save_*`).
+>
+> ⚠️ **병합 결정(2026-06-10):** 버튼매핑/플로우 탭·셀렉터 테스트·설정 import/export 는 `tasks-260610-4-flow-builder.md`
+> (카드형 버튼매핑 P3 / 플로우 빌더 P4 / 폴더형 import/export P5)가 담당한다.
+> 따라서 이 Push 는 **셀렉터 탭을 만들지 않고**, 위 5개 설정 그룹 기본 탭만 구축한다(중복 제거).
+> flow-builder 가 이후 같은 `SettingsView` 에 버튼매핑·플로우 탭과 헤더 import/export 버튼을 추가한다.
 
 ---
 
@@ -76,44 +81,30 @@
 
 ## 작업
 
-- [ ] 3.0 SettingsView 6탭 재편 (Push 범위)
+> **병합 범위:** 이 Push 는 **웹/시간텀/플로우/타겟/제외** 5개 탭만 만든다. **셀렉터(버튼매핑) 탭은 만들지 않는다** — flow-builder P3 가 카드형으로 구축. 단, 기존 settings_view 에 이미 있는 Selectors 탭은 **제거하지 말고 그대로 둔다**(flow-builder 가 교체). `save_selectors` 호출도 건드리지 않는다.
 
-    - [ ] 3.1 6탭 구조 재편 + load/populate 분리
-        **작업 상세:** §2. `_build_ui` 의 탭 구성을 **웹 / 버튼매핑 / 시간텀 / 플로우 / 타겟 / 제외** 6탭으로 교체(기존 Collection/Delays/Selectors/Excluded/Dependencies 재편 — Dependencies 는 유지 또는 제거 판단, PRD 6탭 기준).
-        탭별 빌더: `_build_web_tab`(§2.1 키: browser/headless/window_width/height/randomize_window/randomize_user_agent/user_data_dir/locale/implicit_wait/page_load_timeout — QComboBox/QCheckBox/QSpinBox/QLineEdit 적절히), `_build_selectors_tab`(3.2), `_build_delays_tab`(시간텀 — 기존 표 + scroll/typing_char 행 추가), `_build_flow_tab`(§2.4), `_build_target_tab`(§2.5), `_build_excluded_tab`(기존 유지).
-        `load()` 가 `storage.load_web/load_selectors/load_delays/load_flow/load_target/load_excluded` 호출하도록 교체. `_populate` 를 그룹별로 분리.
+- [x] 3.0 SettingsView 기본 설정 탭 (Push 범위)
+
+    - [x] 3.1 기본 탭 구조 + load/populate 분리
+        **작업 상세:** §2. `_build_ui` 의 탭 구성에 **웹 / 시간텀 / 플로우 / 타겟 / 제외** 탭을 구축한다(기존 Collection→타겟/플로우로 분해, Delays→시간텀, Excluded 유지, Dependencies 는 유지 또는 제거 판단). **기존 Selectors 탭은 그대로 유지**(flow-builder P3 가 버튼매핑 카드로 교체 예정 — 지금 손대지 말 것).
+        탭별 빌더:
+        - `_build_web_tab`(§2.1: browser/headless/window_width/height/randomize_window/randomize_user_agent/user_data_dir/locale/implicit_wait/page_load_timeout — QComboBox/QCheckBox/QSpinBox/QLineEdit 적절히)
+        - `_build_delays_tab`(시간텀 — 기존 표 + `scroll`/`typing_char` 행 추가, `load_delays()` 의 `{step_id:(min,max)}` 형태 반영)
+        - `_build_flow_tab`(§2.4: max_tags/tag_start_index/posts_per_tag/scroll_max_attempts/skip_visited_profile(체크박스)/stop_on_consecutive_miss)
+        - `_build_target_tab`(§2.5: min/max_followers·following, min_posts, keyword, mode)
+        - `_build_excluded_tab`(기존 유지)
+        `load()` 가 `storage.load_web/load_delays/load_flow/load_target/load_excluded`(+ 기존 load_selectors 유지) 호출하도록 교체. `_populate` 를 그룹별 메서드로 분리.
         **참조:** PRD §2, 이미지 `6_프로필 이미지에서 정보 저장.png`, `src/ui/settings_view.py`, `src/design/tokens.py`
-        - [ ] 3.1.T1 pytest (`tests/test_settings_view.py`, `class TestTabsAndPopulate`): qapp+tmp DATA_DIR 로 `SettingsView()` 생성·`load()` 호출 시 예외 없음, 탭 개수==6, 각 탭 위젯 존재, web/flow/target 위젯이 storage 기본값으로 채워짐.
-        - [ ] 3.1.T2 `cd src && .venv/bin/pytest tests/test_settings_view.py::TestTabsAndPopulate -v` 실행 및 검증
+        - [x] 3.1.T1 pytest (`tests/test_settings_view.py`, `class TestTabsAndPopulate`): qapp+tmp DATA_DIR 로 `SettingsView()` 생성·`load()` 호출 시 예외 없음, 웹/시간텀/플로우/타겟/제외 탭 위젯 존재, web/flow/target 위젯이 storage 기본값으로 채워짐(예: headless 체크 해제, max_tags=3, mode=hashtag).
+        - [x] 3.1.T2 `cd src && .venv/bin/pytest tests/test_settings_view.py::TestTabsAndPopulate -v` 실행 및 검증
 
-    - [ ] 3.2 버튼매핑 탭 — 행 추가/삭제 + priority 컬럼/정렬
-        **작업 상세:** §2.2. 셀렉터 표 컬럼을 `Step ID | Step Name | Priority | Type | Selector Value` 5열로 확장. **[행 추가]**(현재 선택 step_id 기반 새 후보 행), **[행 삭제]**, **[priority 정렬]**(step_id→priority 오름차순 재정렬) 버튼 추가.
-        `_collect_selectors()` 가 priority(int) 포함 dict 리스트 반환. `_save_all` 이 `storage.save_selectors` 로 저장. `_reset_selectors` 는 `storage.selector_defaults()` 사용.
-        **참조:** PRD §2.2, 이미지 `1_돋보기 클릭.png`, `src/ui/settings_view.py` (`_build_selectors_tab`, `_collect_selectors`)
-        - [ ] 3.2.T1 pytest (`class TestSelectorRows`): 행 추가 메서드 호출 시 rowCount 증가, 행 삭제 시 감소, priority 정렬 메서드가 step_id별 priority 오름차순 배치, `_collect_selectors` 가 priority int 포함 반환.
-        - [ ] 3.2.T2 `cd src && .venv/bin/pytest tests/test_settings_view.py::TestSelectorRows -v` 실행 및 검증
-
-    - [ ] 3.3 [셀렉터 테스트] 버튼 — 매칭 개수 표시
-        **작업 상세:** §2.2. 버튼매핑 탭에 **[셀렉터 테스트]** 버튼. 현재 선택 행의 `selector_type/value` 로, **열려있는 드라이버가 있으면**(메인에서 주입받은 driver 참조 or 콜백 신호) `find_elements` 매칭 개수를 메시지로 표시. 드라이버 없으면 "실행 중 브라우저 없음" 안내(QMessageBox).
-        구현 단순화: settings_view 가 직접 selenium 을 들지 않도록, `selector_test_requested = pyqtSignal(str, str)`(type, value) 신호만 emit 하고 결과는 `show_selector_test_result(count:int)` 슬롯으로 표시. 실제 매칭은 main_window/scraper 가 처리(Push4 와 연계, 이 Push 는 신호+슬롯+UI 까지).
-        **참조:** PRD §2.2
-        - [ ] 3.3.T1 pytest (`class TestSelectorTest`): 선택 행 없을 때 안전(예외 없음), 행 선택 후 테스트 트리거 시 `selector_test_requested` 가 올바른 (type,value)로 emit(QSignalSpy 대신 신호 연결 후 콜백 리스트 캡처), `show_selector_test_result(3)` 호출 시 예외 없음.
-        - [ ] 3.3.T2 `cd src && .venv/bin/pytest tests/test_settings_view.py::TestSelectorTest -v` 실행 및 검증
-
-    - [ ] 3.4 [설정 불러오기]/[설정 내보내기] — Import/Export
-        **작업 상세:** §7. 헤더 바에 **[설정 불러오기] [설정 내보내기]** 버튼 추가.
-        Export: 각 CSV 를 사용자가 고른 폴더로 `shutil.copy`(storage 에 `export_config(dest_dir)` 헬퍼 추가 또는 settings_view 가 `storage.DATA_DIR` 의 파일 목록 복사). 대상 파일: web/selectors/delays/flow/target/excluded/results.
-        Import: `QFileDialog` 로 폴더 선택 → 해당 폴더의 동명 CSV 를 `DATA_DIR` 로 교체 복사 후 `load()` 재호출 + `imported.emit()`. 파일 I/O 는 storage 헬퍼(`import_config(src_dir)`/`export_config(dest_dir)`)에 두는 것을 권장(테스트 용이).
-        **참조:** PRD §7, `src/core/storage.py` (`export_results`/`shutil` 패턴)
-        - [ ] 3.4.T1 pytest (`class TestImportExport`, **storage 헬퍼 단위 테스트로 검증**): tmp DATA_DIR 에 CSV 생성 → `export_config(dest)` 후 dest 에 동일 파일 존재, `import_config(src)` 후 DATA_DIR 내용 교체 확인. (QFileDialog 는 테스트 안 함 — 헬퍼만.)
-        - [ ] 3.4.T2 `cd src && .venv/bin/pytest tests/test_settings_view.py::TestImportExport -v` 실행 및 검증
-
-    - [ ] 3.5 _save_all 통합 + collect 전부 연결
-        **작업 상세:** `_save_all()` 이 `storage.save_web/save_selectors/save_delays/save_flow/save_target/save_excluded` 를 모두 호출하도록 통합. 각 `_collect_web/_collect_delays/_collect_flow/_collect_target/_collect_selectors/_collect_excluded` 구현. 저장 실패 시 `QMessageBox.critical`(기존 패턴). 성공 시 `back_requested.emit()`.
+    - [ ] 3.2 _save_all 통합 + collect (web/delays/flow/target/excluded)
+        **작업 상세:** `_save_all()` 이 `storage.save_web/save_delays/save_flow/save_target/save_excluded` 를 호출하도록 통합(+ 기존 `save_selectors`/`save_settings` 호출은 그대로 유지). 각 `_collect_web/_collect_delays/_collect_flow/_collect_target/_collect_excluded` 구현. `_collect_delays` 는 `{step_id:(min,max)}` dict 로 반환. 저장 실패 시 `QMessageBox.critical`(기존 패턴). 성공 시 `back_requested.emit()`.
+        ⚠️ 셀렉터 collect/save 는 기존 코드 그대로(flow-builder 영역).
         **참조:** `src/ui/settings_view.py` (`_save_all`, `_collect_*`)
-        - [ ] 3.5.T1 pytest (`class TestSaveAll`): 위젯값 세팅 후 `_save_all` 호출 → tmp DATA_DIR 에 6개 CSV 생성·값 round-trip(load 로 재확인), 잘못된 숫자 입력 시 예외 전파 없이 처리.
-        - [ ] 3.5.T2 `cd src && .venv/bin/pytest tests/test_settings_view.py::TestSaveAll -v` 실행 및 검증
+        - [ ] 3.2.T1 pytest (`class TestSaveAll`): 위젯값 세팅 후 `_save_all` 호출 → tmp DATA_DIR 에 web/delays/flow/target/excluded CSV 생성·값 round-trip(`storage.load_*` 로 재확인), 잘못된 숫자 입력 시 예외 전파 없이 처리.
+        - [ ] 3.2.T2 `cd src && .venv/bin/pytest tests/test_settings_view.py::TestSaveAll -v` 실행 및 검증
 
-    - [ ] 3.6 전체 회귀 + 수동 스모크
-        **작업 상세:** `cd src && .venv/bin/pytest tests/ -v` 통과. 가능하면 `.venv/bin/python main.py` 로 설정 화면 6탭 렌더 육안 확인(헤드리스 환경이면 생략하고 사유 기록).
-        - [ ] 3.6.T1 `cd src && .venv/bin/pytest tests/ -v` 전체 통과 확인
+    - [ ] 3.3 전체 회귀 + 스모크
+        **작업 상세:** `cd src && .venv/bin/pytest tests/ -v` 전체 통과(기존 185 + 신규 settings 테스트). 헤드리스면 `SettingsView` 생성·`load()`·`_save_all()` 스모크로 대체하고 사유 기록.
+        - [ ] 3.3.T1 `cd src && .venv/bin/pytest tests/ -v` 전체 통과 확인
