@@ -13,6 +13,32 @@ import datetime
 from core.flows.base import Step, Outcome
 from core.scraper_parsing import parse_followers, _BLACKLISTED_PATHS
 
+# JavaScript: 게시물 페이지에서 /username/ 패턴 링크를 article > main > body 순으로 탐색.
+_JS_FIND_PROFILE_USERNAME = """
+(function() {
+    var pat = /^\\/([A-Za-z0-9_.]{1,30})\\/$/;
+    var bl = ['explore','p','reel','reels','stories','direct','accounts',
+              'about','privacy','legal','terms','help','tv','tagged'];
+    var containers = [
+        document.querySelector('article header'),
+        document.querySelector('article'),
+        document.querySelector('main'),
+        document.body
+    ];
+    for (var ci = 0; ci < containers.length; ci++) {
+        var c = containers[ci];
+        if (!c) continue;
+        var links = c.querySelectorAll('a[href]');
+        for (var i = 0; i < links.length; i++) {
+            var h = (links[i].getAttribute('href') || '');
+            var m = pat.exec(h);
+            if (m && bl.indexOf(m[1]) === -1) return m[1];
+        }
+    }
+    return null;
+})()
+"""
+
 
 # ── Multi-keyword parsing (260610 Fix-1) ────────────────────────────────────────
 
@@ -289,9 +315,11 @@ class PeekUsernameGate(Step):
 
     def execute(self, ctx) -> Outcome:
         t, driver = ctx.thread, ctx.driver
-        by, value = t._get_by("profile_link")
+        ctx.peeked_username = ""
         peeked = ""
+        # 1. 설정된 셀렉터로 시도
         try:
+            by, value = t._get_by("profile_link")
             els = driver.find_elements(by, value)
             for el in els:
                 href = (el.get_attribute("href") or "").rstrip("/")
@@ -303,8 +331,17 @@ class PeekUsernameGate(Step):
                 ):
                     peeked = username_part
                     break
-        except Exception as exc:
-            t._log(f"  [peek-err] {exc}")
+        except Exception:
+            pass
+        # 2. 셀렉터 실패 시 JS 폴백
+        if not peeked:
+            try:
+                result = driver.execute_script(_JS_FIND_PROFILE_USERNAME)
+                if result:
+                    peeked = str(result).strip()
+            except Exception:
+                pass
+        ctx.peeked_username = peeked
         if peeked and t._should_skip(peeked):
             return Outcome.SKIP_POST
         return Outcome.CONTINUE
@@ -315,30 +352,53 @@ class NavigateToProfile(Step):
     it. Stores the profile URL on ``ctx`` and returns SKIP_POST on failure."""
 
     def execute(self, ctx) -> Outcome:
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
         t, driver = ctx.thread, ctx.driver
-        by, value = t._get_by("profile_link")
         ctx.profile_url = ""
+        username = ""
+
+        # 1. 설정된 셀렉터 (timeout 5s로 줄여 지연 최소화)
         try:
-            WebDriverWait(driver, 8).until(EC.presence_of_element_located((by, value)))
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            by, value = t._get_by("profile_link")
+            WebDriverWait(driver, 5).until(EC.presence_of_element_located((by, value)))
             els = driver.find_elements(by, value)
             for el in els:
                 href = (el.get_attribute("href") or "").rstrip("/")
-                username_part = href.split("/")[-1]
-                if (
-                    username_part
-                    and username_part not in _BLACKLISTED_PATHS
-                    and re.match(r'^[A-Za-z0-9_.]+$', username_part)
-                ):
-                    profile_url = f"https://www.instagram.com/{username_part}/"
-                    t._log(f"  [5] navigating to profile: @{username_part}")
-                    driver.get(profile_url)
-                    ctx.profile_url = profile_url
-                    return Outcome.CONTINUE
-        except Exception as exc:
-            t._log(f"  [5-err] {exc}")
-        t._log("  [skip] no profile link found")
+                u = href.split("/")[-1]
+                if u and u not in _BLACKLISTED_PATHS and re.match(r'^[A-Za-z0-9_.]+$', u):
+                    username = u
+                    break
+        except Exception:
+            pass
+
+        # 2. JS 폴백: article/main 내 /username/ 패턴 링크 탐색
+        if not username:
+            try:
+                result = driver.execute_script(_JS_FIND_PROFILE_USERNAME)
+                if result:
+                    username = str(result).strip()
+                    t._log(f"  [5-js] found via JS: @{username}")
+            except Exception as exc:
+                t._log(f"  [5-js-err] {exc}")
+
+        # 3. PeekUsernameGate 에서 미리 추출한 username
+        if not username:
+            username = getattr(ctx, "peeked_username", "")
+            if username:
+                t._log(f"  [5-peek] using peeked username: @{username}")
+
+        if username:
+            profile_url = f"https://www.instagram.com/{username}/"
+            try:
+                t._log(f"  [5] navigating to profile: @{username}")
+                driver.get(profile_url)
+                ctx.profile_url = profile_url
+                return Outcome.CONTINUE
+            except Exception as exc:
+                t._log(f"  [5-nav-err] {exc}")
+
+        t._log("  [5-err] no profile link found — skipping post")
         return Outcome.SKIP_POST
 
 

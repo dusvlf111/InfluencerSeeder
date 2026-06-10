@@ -15,12 +15,35 @@ def selector_defaults() -> list[dict]:
     return [dict(row) for row in _SELECTOR_DEFAULTS]
 
 
+def normalize_selector_value(value) -> str:
+    """Sanitize a pasted selector_value.
+
+    양끝 공백을 strip 하고 내부의 ``\\r`` / ``\\n`` / ``\\t`` 를 제거(빈 문자열로
+    replace)한다. **내부의 일반 스페이스는 보존** — CSS 자손결합자(``header a``),
+    XPath 술어(``[@title='a b']``), 콤마 구분(``header h2, header h1``)이 붙여넣기
+    중 섞인 줄바꿈/탭 때문에 깨지는 것만 방지한다.
+
+    예) ``" /html/a\\nb "`` → ``"/html/ab"`` , ``"/a b"`` → ``"/a b"`` .
+    """
+    if value is None:
+        return ""
+    text = str(value).strip()
+    for ws in ("\r", "\n", "\t"):
+        text = text.replace(ws, "")
+    return text
+
+
 def _normalize_selector_row(row: dict) -> dict:
     from core import storage as _st
     out = {k: (row.get(k) if row.get(k) is not None else "") for k in _SELECTOR_FIELDNAMES}
     # priority: 결측/비숫자 → 1 (하위호환), int 화
     prio = _st._coerce(out.get("priority") or "")
     out["priority"] = prio if isinstance(prio, int) else 1
+    # selector_value: 붙여넣기 시 섞인 줄바꿈/탭 제거(스페이스는 보존).
+    out["selector_value"] = normalize_selector_value(out.get("selector_value"))
+    # 식별/타입 필드는 strip 정도로 줄바꿈 잔재만 제거.
+    for k in ("step_id", "step_name", "selector_type"):
+        out[k] = str(out.get(k) or "").strip()
     return out
 
 
@@ -61,4 +84,9 @@ def save_selectors(rows: list[dict]):
             out = dict(row)
             if not str(out.get("priority", "")).strip():
                 out["priority"] = 1
+            # 저장 경로에서도 selector_value 정규화(줄바꿈/탭 제거, 스페이스 보존).
+            out["selector_value"] = normalize_selector_value(out.get("selector_value"))
+            for k in ("step_id", "step_name", "selector_type"):
+                if k in out:
+                    out[k] = str(out.get(k) or "").strip()
             writer.writerow(out)

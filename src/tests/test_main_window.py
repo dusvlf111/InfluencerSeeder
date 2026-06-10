@@ -76,15 +76,14 @@ class TestTray:
         window._restore_from_tray()
         assert window.isMinimized() is False
 
-    def test_close_to_tray_saves_geometry(self, window):
-        # With a tray, closeEvent hides to tray and records geometry for restore.
+    def test_close_quits_even_with_tray(self, window):
+        # 닫기(X)는 트레이 유무와 관계없이 완전 종료 (event.accept).
         window._tray = MagicMock()
-        window._force_quit = False
         window.show()
         ev = MagicMock()
         window.closeEvent(ev)
-        ev.ignore.assert_called_once()
-        assert getattr(window, "_saved_geometry", None) is not None
+        ev.accept.assert_called_once()
+        ev.ignore.assert_not_called()
 
     def test_restore_after_geometry_saved_no_exception(self, window):
         # Saving then restoring geometry round-trips without error.
@@ -187,11 +186,12 @@ class TestLoginButtonRemoved:
         window._control.set_running(False)
         assert window._control._btn_start.isEnabled() is True
 
-    def test_on_waiting_login_shows_dialog(self, window):
+    def test_on_waiting_login_shows_banner(self, window):
+        # 모달 대신 results_panel 내 로그인 배너가 표시된다.
         window._on_waiting_login()
-        assert window._login_dialog is not None
+        assert window._results._login_banner.isHidden() is False
         # cleanup
-        window._login_dialog.close()
+        window._results.hide_login_banner()
 
 
 # ── 4.5 Progress label + log color ──────────────────────────────────────────

@@ -222,7 +222,9 @@ class TestMappingTable:
         table.setItem(r, self._SID, QTableWidgetItem("my_custom_step"))
         table.setItem(r, self._NAME, QTableWidgetItem("커스텀"))
         table.setItem(r, self._PRIO, QTableWidgetItem("2"))
-        table.setItem(r, self._TYPE, QTableWidgetItem("css"))
+        # Type 은 콤보 위젯 — 항목을 선택해 지정한다.
+        type_combo = table.cellWidget(r, self._TYPE)
+        type_combo.setCurrentText("css")
         table.setItem(r, self._VALUE, QTableWidgetItem("div.custom"))
         view._save_all()
         reloaded = storage.load_selectors()
@@ -271,6 +273,51 @@ class TestMappingTable:
         n = view._mapping_table.rowCount()
         view.load()  # second load must not duplicate rows
         assert view._mapping_table.rowCount() == n
+
+    def test_type_cell_is_combo_with_choices(self, view):
+        from PyQt6.QtWidgets import QComboBox
+        view.load()
+        combo = view._mapping_table.cellWidget(0, self._TYPE)
+        assert isinstance(combo, QComboBox)
+        items = [combo.itemText(i) for i in range(combo.count())]
+        for t in ("xpath", "css", "coord"):
+            assert t in items
+        # 기존 값이 콤보에 선택되어 있어야 한다.
+        expected = storage.load_selectors()[0].get("selector_type", "xpath")
+        assert combo.currentText() == expected
+
+    def test_added_row_type_defaults_to_xpath(self, view):
+        view.load()
+        view._mapping_add_row()
+        r = view._mapping_table.rowCount() - 1
+        combo = view._mapping_table.cellWidget(r, self._TYPE)
+        assert combo is not None
+        assert combo.currentText() == "xpath"
+
+    def test_type_combo_selection_round_trips(self, view):
+        from PyQt6.QtWidgets import QTableWidgetItem
+        view.load()
+        table = view._mapping_table
+        view._mapping_add_row()
+        r = table.rowCount() - 1
+        table.setItem(r, self._SID, QTableWidgetItem("coord_step"))
+        table.setItem(r, self._PRIO, QTableWidgetItem("1"))
+        table.cellWidget(r, self._TYPE).setCurrentText("coord")
+        table.setItem(r, self._VALUE, QTableWidgetItem("100,200"))
+        rows = view._collect_selectors()
+        got = next(x for x in rows if x["step_id"] == "coord_step")
+        assert got["selector_type"] == "coord"
+
+    def test_move_row_preserves_type_combo(self, view):
+        from PyQt6.QtWidgets import QTableWidgetItem
+        view.load()
+        table = view._mapping_table
+        table.cellWidget(0, self._TYPE).setCurrentText("xpath")
+        table.cellWidget(1, self._TYPE).setCurrentText("css")
+        table.selectRow(0)
+        view._mapping_move_row(1)
+        assert table.cellWidget(0, self._TYPE).currentText() == "css"
+        assert table.cellWidget(1, self._TYPE).currentText() == "xpath"
 
 
 # ── Fix-2 B: 수집 항목 탭 ───────────────────────────────────────────────────────

@@ -87,55 +87,71 @@ _DELAY_DEFAULTS: list[tuple[str, tuple[float, float]]] = [
 # ── Selectors (§2.2) — step 당 priority 정렬 fallback 체인 ──────────────────────
 
 _SELECTOR_DEFAULTS: list[dict] = [
-    {
+    # ── 검색 아이콘 (Step1) ──────────────────────────────────────────────────
+    {   # 모바일: 하단 nav 검색 아이콘 (SVG aria-label)
         "step_id": "search_icon", "step_name": "돋보기 클릭(Step1)", "priority": 1,
-        "selector_type": "xpath",
-        "selector_value": "//a[contains(@href,'/explore/')]//*[name()='svg' and @aria-label='검색']",
+        "selector_type": "css",
+        "selector_value": "svg[aria-label='Search'], svg[aria-label='검색']",
     },
-    {
+    {   # 폴백: explore 링크
         "step_id": "search_icon", "step_name": "돋보기 클릭(Step1)", "priority": 2,
         "selector_type": "xpath",
-        "selector_value": "//a[contains(@href,'/search')]",
+        "selector_value": "//a[contains(@href,'/explore/') or contains(@href,'/search')]",
     },
-    {
-        "step_id": "search_icon", "step_name": "돋보기 클릭(Step1)", "priority": 3,
-        "selector_type": "css",
-        "selector_value": "svg[aria-label='Search']",
-    },
-    {
+
+    # ── 검색 입력 (Step2) ────────────────────────────────────────────────────
+    {   # 모바일/데스크톱 공통
         "step_id": "search_input", "step_name": "검색 입력(Step2)", "priority": 1,
-        "selector_type": "xpath",
-        "selector_value": "//input[@placeholder='검색']",
+        "selector_type": "css",
+        "selector_value": "input[type='text'], input[placeholder]",
     },
     {
         "step_id": "search_input", "step_name": "검색 입력(Step2)", "priority": 2,
         "selector_type": "xpath",
-        "selector_value": "//input[@placeholder='Search']",
+        "selector_value": "//input[@placeholder='검색' or @placeholder='Search']",
     },
+
+    # ── 태그 결과 클릭 (Step3) ───────────────────────────────────────────────
     {
         "step_id": "tag_result", "step_name": "태그 클릭(Step3)", "priority": 1,
         "selector_type": "xpath",
         "selector_value": "//a[contains(@href,'/explore/tags/')]",
     },
+
+    # ── 게시물 링크 (Step4) ──────────────────────────────────────────────────
     {
         "step_id": "post_link", "step_name": "이미지 클릭(Step4)", "priority": 1,
         "selector_type": "xpath",
-        "selector_value": "//a[contains(@href,'/p/')]",
+        "selector_value": "//a[contains(@href,'/p/') or contains(@href,'/reel/')]",
+    },
+
+    # ── 프로필 링크 (Step5) ──────────────────────────────────────────────────
+    {   # 모바일: 게시물 상단 유저명 링크
+        "step_id": "profile_link", "step_name": "프로필 클릭(Step5)", "priority": 1,
+        "selector_type": "css",
+        "selector_value": "a[href]:not([href='/']):not([href*='/p/']):not([href*='/explore/']):not([href*='/reel/'])",
     },
     {
-        "step_id": "profile_link", "step_name": "프로필 클릭(Step5)", "priority": 1,
+        "step_id": "profile_link", "step_name": "프로필 클릭(Step5)", "priority": 2,
         "selector_type": "css",
         "selector_value": "header a[href]:not([href='/'])",
     },
-    {
+
+    # ── 프로필 페이지 정보 ───────────────────────────────────────────────────
+    {   # 유저네임
         "step_id": "username_text", "step_name": "유저네임", "priority": 1,
         "selector_type": "css",
-        "selector_value": "header h2, header h1",
+        "selector_value": "h2, h1",
     },
     {
         "step_id": "followers_count", "step_name": "팔로워 수", "priority": 1,
         "selector_type": "xpath",
-        "selector_value": "//a[contains(@href,'/followers/')]//span[@title]",
+        "selector_value": "//a[contains(@href,'/followers/')]//span[@title or @class]",
+    },
+    {
+        "step_id": "followers_count", "step_name": "팔로워 수", "priority": 2,
+        "selector_type": "xpath",
+        "selector_value": "//a[contains(@href,'/followers/')]//span",
     },
     {
         "step_id": "following_count", "step_name": "팔로우 수", "priority": 1,
@@ -148,9 +164,14 @@ _SELECTOR_DEFAULTS: list[dict] = [
         "selector_value": "//header//li[1]//span//span",
     },
     {
+        "step_id": "posts_count", "step_name": "게시물 수", "priority": 2,
+        "selector_type": "css",
+        "selector_value": "header ul li:first-child span",
+    },
+    {
         "step_id": "bio_text", "step_name": "소개글", "priority": 1,
         "selector_type": "css",
-        "selector_value": "header section > div:last-child",
+        "selector_value": "header section > div:last-child, header div[dir]",
     },
     {
         "step_id": "website_link", "step_name": "웹사이트", "priority": 1,

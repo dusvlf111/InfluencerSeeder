@@ -46,16 +46,17 @@ class MappingTabMixin:
         table.setHorizontalHeaderLabels(_MAP_COLS)
         header = table.horizontalHeader()
         # 고정폭으로 보기 좋게(콤보/편집이 잘리지 않도록). Value 만 Stretch 유지.
+        # Step ID: Interactive, Step Name: Stretch(긴 한국어 이름 수용), Priority/Type: Interactive
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-        table.setColumnWidth(0, 150)
-        table.setColumnWidth(1, 140)
-        table.setColumnWidth(2, 70)
-        table.setColumnWidth(3, 90)
-        header.setMinimumSectionSize(60)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
+        table.setColumnWidth(0, 130)   # Step ID
+        table.setColumnWidth(2, 55)    # Priority (숫자)
+        table.setColumnWidth(3, 80)    # Type (xpath/css/coord)
+        table.setColumnWidth(4, 220)   # Selector Value (기본폭, 드래그로 확장 가능)
+        header.setMinimumSectionSize(55)
         table.setMinimumWidth(600)
         table.verticalHeader().setVisible(False)
         # 콤보/편집 셀이 세로로 잘리지 않도록 행 높이를 키운다.

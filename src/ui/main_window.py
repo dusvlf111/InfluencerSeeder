@@ -1,7 +1,7 @@
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6.QtWidgets import (
     QMainWindow, QSplitter, QStackedWidget,
-    QSystemTrayIcon, QMenu, QMessageBox, QApplication,
+    QSystemTrayIcon, QMenu, QMessageBox, QApplication, QLabel,
 )
 
 import core.storage as storage
@@ -12,19 +12,25 @@ from ui.panels.results_panel import ResultsPanel
 from ui.settings_view import SettingsView
 from ui.dialogs.login_dialog import LoginWaitDialog
 
+try:
+    from ui.panels.browser_panel import BrowserPanel
+    _HAS_WEBENGINE = True
+except Exception:
+    _HAS_WEBENGINE = False
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("인플루언서 시딩기")
-        self.setMinimumSize(1100, 700)
+        self.setMinimumSize(1200, 700)
 
         self._scraper: ScraperThread | None = None
         self._scrape_had_error = False
-        self._login_dialog: LoginWaitDialog | None = None
         self._run_logger: RunLogger | None = None
         self._tray: QSystemTrayIcon | None = None
         self._skip_count = 0
+        self._browser = None  # BrowserPanel (WebEngine이 있을 때만)
         self._build_ui()
         self._setup_tray()
 
@@ -32,20 +38,39 @@ class MainWindow(QMainWindow):
         self._stack = QStackedWidget()
         self.setCentralWidget(self._stack)
 
-        # Page 0: main view
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setHandleWidth(1)
+        # Page 0: main view — 3-패널 (컨트롤 | 브라우저 | 결과/로그)
+        outer = QSplitter(Qt.Orientation.Horizontal)
+        outer.setHandleWidth(1)
+
         self._control = ControlPanel()
-        self._results = ResultsPanel()
         self._control.start_requested.connect(self._start_scrape)
         self._control.resume_requested.connect(self._resume_scrape)
         self._control.stop_requested.connect(self._stop_scrape)
         self._control.reset_requested.connect(self._reset)
         self._control.settings_requested.connect(self.show_settings)
-        splitter.addWidget(self._control)
-        splitter.addWidget(self._results)
-        splitter.setSizes([340, 760])
-        self._stack.addWidget(splitter)
+        outer.addWidget(self._control)
+
+        # 중간: 임베디드 브라우저 (WebEngine 사용 가능 시)
+        if _HAS_WEBENGINE:
+            self._browser = BrowserPanel()
+            outer.addWidget(self._browser)
+        else:
+            placeholder = QLabel(
+                "임베디드 브라우저 미지원\n\n"
+                "다음 패키지 설치 후 재시작:\n"
+                "sudo apt install libnspr4 libnss3"
+            )
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            placeholder.setObjectName("labelMuted")
+            outer.addWidget(placeholder)
+
+        self._results = ResultsPanel()
+        self._results.login_done_requested.connect(self._login_done)
+        outer.addWidget(self._results)
+
+        # 비율: 컨트롤(300) | 브라우저(520) | 결과(380)
+        outer.setSizes([300, 520, 380])
+        self._stack.addWidget(outer)
 
         # Page 1: settings view
         self._settings_view = SettingsView()
@@ -107,6 +132,14 @@ class MainWindow(QMainWindow):
         merged.setdefault("flow", storage.load_flow())
         merged.setdefault("target", storage.load_target())
         merged["resume_state"] = resume_state
+        # 임베디드 브라우저 사용 시: Selenium은 헤드리스 + 모바일 UA로 숨김
+        if self._browser is not None:
+            merged["cookies"] = self._browser.get_selenium_cookies()
+            web = dict(merged.get("web") or {})
+            web["headless"] = "true"           # Chrome 창 숨김
+            web["randomize_user_agent"] = "false"
+            web["mobile_ua"] = "true"          # 모바일 UA (scraper_driver 처리)
+            merged["web"] = web
         return merged
 
     def _launch_scrape(self, params: dict, resume_state: dict | None):
@@ -143,9 +176,7 @@ class MainWindow(QMainWindow):
     def _login_done(self):
         if self._scraper:
             self._scraper.login_done()
-        if self._login_dialog and self._login_dialog.isVisible():
-            self._login_dialog.close()
-        self._login_dialog = None
+        self._results.hide_login_banner()
         self._control.set_running(True, waiting_login=False)
         self._results.set_status("수집 중...")
 
@@ -235,11 +266,9 @@ class MainWindow(QMainWindow):
     def _on_waiting_login(self):
         self._control.set_running(True, waiting_login=True)
         self._results.set_status("브라우저에서 로그인 후 버튼을 눌러주세요")
-        self._results.show_log_tab()
-
-        self._login_dialog = LoginWaitDialog(self)
-        self._login_dialog.accepted.connect(self._login_done)
-        self._login_dialog.show()
+        self._results.show_login_banner(
+            "Chrome 브라우저에서 Instagram에 로그인 후 [로그인 완료] 버튼을 눌러주세요."
+        )
 
     def reload_excluded(self, accounts: list[str]):
         self._control.excluded_widget.reload(accounts)
@@ -295,7 +324,6 @@ class MainWindow(QMainWindow):
         self.activateWindow()
 
     def _quit_from_tray(self):
-        self._force_quit = True
         self.close()
 
     def _notify_tray(self, title: str, message: str):
@@ -325,20 +353,15 @@ class MainWindow(QMainWindow):
         super().changeEvent(event)
 
     def closeEvent(self, event):
-        # 트레이 사용 가능 + 강제종료 아님 → 닫기 대신 트레이로 숨김(§4).
-        if self._tray is not None and not getattr(self, "_force_quit", False):
-            event.ignore()
-            # 숨기기 직전 geometry 저장 → 복귀 시 원래 크기/위치 복원(§4).
-            self._saved_geometry = self.saveGeometry()
-            self.hide()
-            self._notify_tray("백그라운드 실행 중", "트레이에서 계속 수집합니다")
-            return
+        """닫기(X) → 완전 종료. 백그라운드 실행은 최소화(−) 버튼으로만."""
         if self._scraper and self._scraper.isRunning():
             self._scraper.stop()
-            self._scraper.wait(3000)
+            self._scraper.wait(2000)
         if self._run_logger is not None:
             self._run_logger.close()
             self._run_logger = None
         if self._tray is not None:
             self._tray.hide()
         event.accept()
+        # QLocalServer/QSystemTrayIcon 등이 이벤트 루프를 살려두는 것을 명시 종료
+        QApplication.instance().quit()

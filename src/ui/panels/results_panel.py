@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout,
+    QWidget, QVBoxLayout, QHBoxLayout, QFrame,
     QLabel, QPushButton, QProgressBar, QTextEdit,
     QTableWidget, QTableWidgetItem, QTabWidget,
     QGroupBox, QHeaderView, QAbstractItemView,
@@ -16,6 +16,8 @@ import core.storage as storage
 
 class ResultsPanel(QWidget):
     """Right panel — progress, results table, log."""
+
+    login_done_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -93,6 +95,27 @@ class ResultsPanel(QWidget):
         self._log_text = QTextEdit()
         self._log_text.setReadOnly(True)
         layout.addWidget(self._log_text)
+
+        # 로그인 배너 — waiting_login_signal 시 표시, 기본 숨김
+        self._login_banner = QFrame()
+        self._login_banner.setObjectName("loginBanner")
+        self._login_banner.setStyleSheet(
+            "QFrame#loginBanner { background: #2a1f00; border: 1px solid #f5a623; border-radius: 6px; }"
+        )
+        banner_layout = QHBoxLayout(self._login_banner)
+        banner_layout.setContentsMargins(12, 8, 12, 8)
+        self._login_msg_label = QLabel("브라우저에서 Instagram에 로그인 후 아래 버튼을 눌러주세요.")
+        self._login_msg_label.setStyleSheet("color: #f5a623; font-weight: bold;")
+        self._login_msg_label.setWordWrap(True)
+        banner_layout.addWidget(self._login_msg_label, 1)
+        btn_login_done = QPushButton("로그인 완료")
+        btn_login_done.setObjectName("btnPrimary")
+        btn_login_done.setMinimumWidth(100)
+        btn_login_done.clicked.connect(self.login_done_requested)
+        banner_layout.addWidget(btn_login_done)
+        self._login_banner.setVisible(False)
+        layout.addWidget(self._login_banner)
+
         return tab
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -200,6 +223,17 @@ class ResultsPanel(QWidget):
 
     def show_results_tab(self):
         self._tabs.setCurrentIndex(0)
+
+    def show_login_banner(self, msg: str = ""):
+        """로그인 대기 배너 표시 (로그 탭 전환 포함)."""
+        if msg:
+            self._login_msg_label.setText(msg)
+        self._login_banner.setVisible(True)
+        self.show_log_tab()
+
+    def hide_login_banner(self):
+        """로그인 완료 후 배너 숨김."""
+        self._login_banner.setVisible(False)
 
     # ── Cell interactions ─────────────────────────────────────────────────────
 

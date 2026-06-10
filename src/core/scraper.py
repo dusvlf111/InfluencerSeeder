@@ -29,6 +29,21 @@ from core.scraper_driver import (  # noqa: F401
 _BLOCKED_URL_MARKERS = ("/accounts/login", "/challenge", "/accounts/suspended")
 
 
+def _clean_selector_value(value) -> str:
+    """Defensive selector_value sanitizer (strip + remove \\r\\n\\t).
+
+    storage 가 이미 정규화하지만, 옛 selectors.csv 데이터나 외부에서 주입된 행을
+    대비해 사용 직전 한 번 더 줄바꿈/탭을 제거한다(내부 스페이스는 보존).
+    chromedriver 의 ``invalid selector ... SyntaxError`` 를 막는 이중 안전.
+    """
+    if value is None:
+        return ""
+    text = str(value).strip()
+    for ws in ("\r", "\n", "\t"):
+        text = text.replace(ws, "")
+    return text
+
+
 # ── ScraperThread ─────────────────────────────────────────────────────────────
 
 class ScraperThread(QThread):
@@ -59,6 +74,7 @@ class ScraperThread(QThread):
         flow: dict | None = None,
         target: dict | None = None,
         resume_state: dict | None = None,
+        cookies: list | None = None,
     ):
         super().__init__()
         self.mode          = mode
@@ -71,7 +87,8 @@ class ScraperThread(QThread):
         from core import storage
 
         # ── v3 config groups (self-load when not injected, §9) ──────────────────
-        self._web    = web    if web    is not None else storage.load_web()
+        self._web     = web    if web    is not None else storage.load_web()
+        self._cookies = cookies or []
         self._delays = delays if delays is not None else storage.load_delays()
         self._flow   = flow   if flow   is not None else storage.load_flow()
         self._target = target if target is not None else storage.load_target()
@@ -214,7 +231,7 @@ class ScraperThread(QThread):
         from selenium.webdriver.common.by import By
         row = self._selectors.get(step_id, {})
         sel_type  = (row.get("selector_type") or "xpath").lower()
-        sel_value = row.get("selector_value") or ""
+        sel_value = _clean_selector_value(row.get("selector_value"))
         by = By.XPATH if sel_type == "xpath" else By.CSS_SELECTOR
         return by, sel_value
 
@@ -232,7 +249,7 @@ class ScraperThread(QThread):
             return None
         for row in chain:
             sel_type  = (row.get("selector_type") or "xpath").lower()
-            sel_value = row.get("selector_value") or ""
+            sel_value = _clean_selector_value(row.get("selector_value"))
             priority  = row.get("priority")
             if sel_type == "coord":
                 try:
@@ -346,7 +363,7 @@ class ScraperThread(QThread):
         driver = None
         try:
             self._log("[browser] launching Chrome...")
-            driver = init_driver(self._web)
+            driver = init_driver(self._web, self._cookies)
             self._driver = driver
 
             driver.get("https://www.instagram.com/")

@@ -45,7 +45,22 @@ def _build_chrome_options(web: dict | None = None):
     if _truthy(web.get("headless")):
         options.add_argument("--headless=new")
 
-    if _truthy(web.get("randomize_user_agent")):
+    _MOBILE_UA = (
+        "Mozilla/5.0 (Linux; Android 13; Pixel 7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.6367.82 Mobile Safari/537.36"
+    )
+
+    if _truthy(web.get("mobile_ua")):
+        options.add_argument(f"--user-agent={_MOBILE_UA}")
+        # 모바일 뷰포트 + 터치 에뮬레이션
+        options.add_argument("--window-size=390,844")
+        mobile_emulation = {
+            "deviceMetrics": {"width": 390, "height": 844, "pixelRatio": 3.0},
+            "userAgent": _MOBILE_UA,
+        }
+        options.add_experimental_option("mobileEmulation", mobile_emulation)
+    elif _truthy(web.get("randomize_user_agent")):
         ua = random.choice(_UA_POOL)
         options.add_argument(f"--user-agent={ua}")
 
@@ -95,7 +110,29 @@ def _apply_stealth(driver):
     return driver
 
 
-def init_driver(web: dict | None = None):
+def _inject_cookies(driver, cookies: list[dict]):
+    """임베디드 브라우저에서 추출한 쿠키를 Selenium Chrome에 주입."""
+    if not cookies:
+        return
+    try:
+        # 쿠키 설정을 위해 인스타 도메인에 있어야 함
+        driver.get("https://www.instagram.com/")
+        for cookie in cookies:
+            try:
+                c = {k: v for k, v in cookie.items()
+                     if k in ("name", "value", "domain", "path", "secure")}
+                # domain이 .instagram.com 형태면 그대로, 아니면 조정
+                if c.get("domain", "").startswith("."):
+                    c["domain"] = c["domain"]
+                driver.add_cookie(c)
+            except Exception:
+                pass
+        driver.refresh()
+    except Exception:
+        pass
+
+
+def init_driver(web: dict | None = None, cookies: list[dict] | None = None):
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
     from webdriver_manager.chrome import ChromeDriverManager
@@ -122,4 +159,6 @@ def init_driver(web: dict | None = None):
     except Exception:
         pass
     _apply_stealth(driver)
+    if cookies:
+        _inject_cookies(driver, cookies)
     return driver

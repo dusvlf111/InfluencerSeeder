@@ -689,6 +689,169 @@ class TestExtractProfileSelectorFallback:
         assert "followers" not in ctx.profile_info
 
 
+class TestPeekUsernameGateCtxStorage:
+    """PeekUsernameGate stores peeked username on ctx.peeked_username for
+    NavigateToProfile fallback use."""
+
+    def _thread(self, seen=None):
+        t = ScraperThread.__new__(ScraperThread)
+        t._log = lambda msg: None
+        t._seen = set(seen or [])
+        t._get_by = lambda ref: ("css selector", "a[href*='/']")
+
+        def _should_skip(username):
+            return username.lower() in {u.lower() for u in t._seen}
+
+        t._should_skip = _should_skip
+        return t
+
+    def _el(self, href):
+        el = MagicMock()
+        el.get_attribute.return_value = href
+        return el
+
+    def test_valid_username_stored_on_ctx(self):
+        from core.flows.steps import PeekUsernameGate
+        t = self._thread()
+        driver = MagicMock()
+        driver.find_elements.return_value = [self._el("https://www.instagram.com/realuser")]
+        ctx = ScrapeContext(thread=t, driver=driver)
+        outcome = PeekUsernameGate().execute(ctx)
+        assert outcome is Outcome.CONTINUE
+        assert ctx.peeked_username == "realuser"
+
+    def test_no_elements_leaves_peeked_empty(self):
+        from core.flows.steps import PeekUsernameGate
+        t = self._thread()
+        driver = MagicMock()
+        driver.find_elements.return_value = []
+        driver.execute_script.return_value = None  # JS fallback도 빈값
+        ctx = ScrapeContext(thread=t, driver=driver)
+        outcome = PeekUsernameGate().execute(ctx)
+        assert outcome is Outcome.CONTINUE
+        assert ctx.peeked_username == ""
+
+    def test_blacklisted_path_not_stored(self):
+        from core.flows.steps import PeekUsernameGate
+        from core.scraper_parsing import _BLACKLISTED_PATHS
+        blacklisted = next(iter(_BLACKLISTED_PATHS))
+        t = self._thread()
+        driver = MagicMock()
+        driver.find_elements.return_value = [
+            self._el(f"https://www.instagram.com/{blacklisted}")
+        ]
+        driver.execute_script.return_value = None  # JS fallback도 빈값
+        ctx = ScrapeContext(thread=t, driver=driver)
+        outcome = PeekUsernameGate().execute(ctx)
+        assert outcome is Outcome.CONTINUE
+        assert ctx.peeked_username == ""
+
+    def test_duplicate_returns_skip_post_and_stores_username(self):
+        from core.flows.steps import PeekUsernameGate
+        t = self._thread(seen={"dupuser"})
+        driver = MagicMock()
+        driver.find_elements.return_value = [self._el("https://www.instagram.com/dupuser")]
+        ctx = ScrapeContext(thread=t, driver=driver)
+        outcome = PeekUsernameGate().execute(ctx)
+        assert outcome is Outcome.SKIP_POST
+        # peeked_username is still populated even when skipping
+        assert ctx.peeked_username == "dupuser"
+
+    def test_exception_leaves_peeked_empty(self):
+        from core.flows.steps import PeekUsernameGate
+        t = self._thread()
+        driver = MagicMock()
+        driver.find_elements.side_effect = Exception("selenium error")
+        driver.execute_script.return_value = None  # JS fallback도 빈값
+        ctx = ScrapeContext(thread=t, driver=driver)
+        outcome = PeekUsernameGate().execute(ctx)
+        assert outcome is Outcome.CONTINUE
+        assert ctx.peeked_username == ""
+
+    def test_previous_peeked_cleared_on_each_call(self):
+        """ctx.peeked_username is reset to '' at start of each execute call."""
+        from core.flows.steps import PeekUsernameGate
+        t = self._thread()
+        driver = MagicMock()
+        driver.find_elements.return_value = []
+        driver.execute_script.return_value = None  # JS fallback도 빈값
+        ctx = ScrapeContext(thread=t, driver=driver)
+        ctx.peeked_username = "stale_value"
+        PeekUsernameGate().execute(ctx)
+        assert ctx.peeked_username == ""
+
+
+class TestNavigateToProfileFallback:
+    """NavigateToProfile uses ctx.peeked_username as fallback when the selector
+    chain fails to find a profile link."""
+
+    def _thread(self):
+        t = ScraperThread.__new__(ScraperThread)
+        t._log = lambda msg: None
+        t._get_by = lambda ref: ("css selector", "a[href*='/']")
+        return t
+
+    def test_fallback_navigates_when_selector_raises(self):
+        from core.flows.steps import NavigateToProfile
+        t = self._thread()
+        driver = MagicMock()
+        # 셀렉터 실패, JS도 빈값 → peeked_username 폴백으로 navigate
+        driver.find_elements.side_effect = Exception("not found")
+        driver.execute_script.return_value = None
+        ctx = ScrapeContext(thread=t, driver=driver)
+        ctx.peeked_username = "fallbackuser"
+        outcome = NavigateToProfile().execute(ctx)
+        assert outcome is Outcome.CONTINUE
+        assert ctx.profile_url == "https://www.instagram.com/fallbackuser/"
+        driver.get.assert_called_with("https://www.instagram.com/fallbackuser/")
+
+    def test_fallback_not_used_when_selector_succeeds(self):
+        from core.flows.steps import NavigateToProfile
+        t = self._thread()
+        driver = MagicMock()
+
+        link_el = MagicMock()
+        link_el.get_attribute.return_value = "https://www.instagram.com/realuser"
+        driver.find_elements.return_value = [link_el]
+
+        ctx = ScrapeContext(thread=t, driver=driver)
+        ctx.peeked_username = "fallbackuser"
+
+        # Patch WebDriverWait at its source so the local import inside execute() is
+        # intercepted; the patched instance's until() is a no-op.
+        with patch("selenium.webdriver.support.ui.WebDriverWait") as mock_wait:
+            mock_wait.return_value.until.return_value = None
+            outcome = NavigateToProfile().execute(ctx)
+
+        assert outcome is Outcome.CONTINUE
+        assert ctx.profile_url == "https://www.instagram.com/realuser/"
+        # driver.get called with the real URL, not the fallback
+        driver.get.assert_called_with("https://www.instagram.com/realuser/")
+
+    def test_no_fallback_and_selector_fails_returns_skip(self):
+        from core.flows.steps import NavigateToProfile
+        t = self._thread()
+        driver = MagicMock()
+        driver.find_elements.side_effect = Exception("not found")
+        driver.execute_script.return_value = None  # JS도 빈값
+        ctx = ScrapeContext(thread=t, driver=driver)
+        ctx.peeked_username = ""
+        outcome = NavigateToProfile().execute(ctx)
+        assert outcome is Outcome.SKIP_POST
+        driver.get.assert_not_called()
+
+    def test_fallback_driver_get_exception_returns_skip(self):
+        from core.flows.steps import NavigateToProfile
+        t = self._thread()
+        driver = MagicMock()
+        driver.find_elements.side_effect = Exception("not found")
+        driver.get.side_effect = Exception("webdriver crashed")
+        ctx = ScrapeContext(thread=t, driver=driver)
+        ctx.peeked_username = "crashuser"
+        outcome = NavigateToProfile().execute(ctx)
+        assert outcome is Outcome.SKIP_POST
+
+
 class TestExtractProfileCollectFields:
     """Fix-2 B: ExtractProfile honors thread._collect_fields — inactive fields are
     neither extracted nor filled via the selector fallback. username is always

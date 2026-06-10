@@ -1,4 +1,5 @@
 import sys
+import os
 from PyQt6.QtWidgets import QApplication
 
 try:
@@ -34,7 +35,7 @@ def main():
 
     # 기존 인스턴스가 있으면 복원 신호만 보내고 종료
     if _try_raise_existing():
-        sys.exit(0)
+        os._exit(0)
 
     app.setStyleSheet(build_stylesheet())
     window = MainWindow()
@@ -47,7 +48,9 @@ def main():
         server.newConnection.connect(lambda: _handle_new_connection(server, window))
 
     window.show()
-    sys.exit(app.exec())
+    app.exec()
+    # os._exit: QThread/QLocalServer 잔류 객체까지 강제 종료 (좀비 프로세스 방지)
+    os._exit(0)
 
 
 def _handle_new_connection(server: "QLocalServer", window: MainWindow):

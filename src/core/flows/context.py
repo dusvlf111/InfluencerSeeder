@@ -25,6 +25,8 @@ class ScrapeContext:
     post_url: str = ""
     profile_url: str = ""
     profile_info: dict = field(default_factory=dict)
+    # Peeked username from PeekUsernameGate — used as NavigateToProfile fallback.
+    peeked_username: str = ""
 
     # ── Delegating conveniences ────────────────────────────────────────────────
 
