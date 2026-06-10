@@ -371,30 +371,29 @@ class MainWindow(QMainWindow):
         self.close()
 
     def _notify_tray(self, title: str, message: str):
-        """트레이 알림(미지원/숨김 아닐 때만)."""
+        """트레이 알림. 창이 숨겨졌거나 최소화됐을 때(=보고 있지 않을 때) 팝업."""
         if self._tray is not None:
             try:
                 self._tray.setToolTip(f"{title} · {message}")
-                if not self.isVisible():
+                if not self.isVisible() or self.isMinimized():
                     self._tray.showMessage(title, message)
             except Exception:
                 pass
 
     def changeEvent(self, event):
-        """최소화 시 트레이로 숨긴다. 수집은 메인스레드 이벤트루프(QTimer/JS 콜백)
-        라 앱이 살아있는 한 트레이에서도 계속 진행된다."""
+        """최소화해도 창을 숨기지(hide) 않고 그냥 최소화 상태로 둔다.
+
+        창을 hide() 하면 QtWebEngine 렌더 위젯이 unmap 되어 페이지가
+        멈추거나 실제 클릭이 안 먹을 수 있다. 최소화(mapped) 상태로 두면
+        backgrounding 방지 플래그(main.py)와 함께 웹뷰가 살아서 수집이 계속된다.
+        최초 최소화 때 한 번만 안내 알림."""
         if (
             event.type() == QEvent.Type.WindowStateChange
             and self.isMinimized()
-            and self._tray is not None
+            and not getattr(self, "_min_notified", False)
         ):
-            event.accept()
-            # 숨기기 직전 geometry 저장 → 복귀 시 원래 크기/위치 복원(§4).
-            self._saved_geometry = self.saveGeometry()
-            # defer hide so the state change settles
-            self.hide()
-            self._notify_tray("백그라운드 실행 중", "트레이에서 계속 수집합니다")
-            return
+            self._min_notified = True
+            self._notify_tray("최소화됨", "최소화 상태에서도 수집은 계속됩니다")
         super().changeEvent(event)
 
     def closeEvent(self, event):
