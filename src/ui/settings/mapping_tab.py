@@ -10,12 +10,16 @@ Selector Value). 임의의 step_id 를 추가해 flow_steps 의 selector_ref 와
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+    QComboBox,
 )
 
 import core.storage as storage
 
 # 자유 편집 테이블 컬럼.
 _MAP_COLS = ["Step ID", "Step Name", "Priority", "Type", "Selector Value"]
+
+# Type 셀 드롭다운 항목.
+_MAP_TYPES = ["xpath", "css", "coord"]
 
 # 상단 안내(이미지 없이).
 _MAPPING_NOTE = (
@@ -41,12 +45,21 @@ class MappingTabMixin:
         table = QTableWidget(0, len(_MAP_COLS))
         table.setHorizontalHeaderLabels(_MAP_COLS)
         header = table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        # 고정폭으로 보기 좋게(콤보/편집이 잘리지 않도록). Value 만 Stretch 유지.
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        table.setColumnWidth(0, 150)
+        table.setColumnWidth(1, 140)
+        table.setColumnWidth(2, 70)
+        table.setColumnWidth(3, 90)
+        header.setMinimumSectionSize(60)
+        table.setMinimumWidth(600)
         table.verticalHeader().setVisible(False)
+        # 콤보/편집 셀이 세로로 잘리지 않도록 행 높이를 키운다.
+        table.verticalHeader().setDefaultSectionSize(36)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._mapping_table = table
         outer.addWidget(table)
@@ -92,13 +105,31 @@ class MappingTabMixin:
             )
 
     @staticmethod
-    def _mapping_set_row(table, r, step_id, step_name, priority, sel_type, value):
+    def _mapping_make_type_combo(sel_type):
+        """Type 셀용 드롭다운(xpath/css/coord). 미지 값이면 항목 추가 후 선택."""
+        combo = QComboBox()
+        combo.setEditable(False)
+        combo.addItems(_MAP_TYPES)
+        tv = str(sel_type or "xpath")
+        idx = combo.findText(tv)
+        if idx < 0:
+            combo.addItem(tv)
+            idx = combo.findText(tv)
+        combo.setCurrentIndex(max(0, idx))
+        return combo
+
+    @classmethod
+    def _mapping_set_type(cls, table, r, sel_type):
+        table.setCellWidget(r, 3, cls._mapping_make_type_combo(sel_type))
+
+    @classmethod
+    def _mapping_set_row(cls, table, r, step_id, step_name, priority, sel_type, value):
         if r >= table.rowCount():
             table.insertRow(r)
         table.setItem(r, 0, QTableWidgetItem(str(step_id or "")))
         table.setItem(r, 1, QTableWidgetItem(str(step_name or "")))
         table.setItem(r, 2, QTableWidgetItem(str(priority)))
-        table.setItem(r, 3, QTableWidgetItem(str(sel_type or "xpath")))
+        cls._mapping_set_type(table, r, sel_type)
         table.setItem(r, 4, QTableWidgetItem(str(value or "")))
 
     def _mapping_add_row(self):
@@ -122,11 +153,23 @@ class MappingTabMixin:
         if target < 0 or target >= table.rowCount():
             return
         cols = table.columnCount()
-        cur = [(table.item(r, c).text() if table.item(r, c) else "") for c in range(cols)]
-        oth = [(table.item(target, c).text() if table.item(target, c) else "") for c in range(cols)]
+
+        def _cell_text(row, c):
+            if c == 3:  # Type 은 콤보 위젯
+                w = table.cellWidget(row, c)
+                return w.currentText() if w else "xpath"
+            it = table.item(row, c)
+            return it.text() if it else ""
+
+        cur = [_cell_text(r, c) for c in range(cols)]
+        oth = [_cell_text(target, c) for c in range(cols)]
         for c in range(cols):
-            table.setItem(r, c, QTableWidgetItem(oth[c]))
-            table.setItem(target, c, QTableWidgetItem(cur[c]))
+            if c == 3:  # Type 셀: 콤보 위젯을 재설정해 값 보존
+                self._mapping_set_type(table, r, oth[c])
+                self._mapping_set_type(table, target, cur[c])
+            else:
+                table.setItem(r, c, QTableWidgetItem(oth[c]))
+                table.setItem(target, c, QTableWidgetItem(cur[c]))
         table.selectRow(target)
 
     def _mapping_reset(self):
@@ -151,11 +194,13 @@ class MappingTabMixin:
                 prio = int(float(raw_prio))
             except (ValueError, TypeError):
                 prio = 1
+            type_combo = table.cellWidget(r, 3)
+            sel_type = type_combo.currentText() if type_combo else "xpath"
             rows.append({
                 "step_id":        sid,
                 "step_name":      (table.item(r, 1).text() if table.item(r, 1) else ""),
                 "priority":       prio,
-                "selector_type":  (table.item(r, 3).text() if table.item(r, 3) else "xpath"),
+                "selector_type":  (sel_type or "xpath"),
                 "selector_value": (table.item(r, 4).text() if table.item(r, 4) else ""),
             })
         return rows

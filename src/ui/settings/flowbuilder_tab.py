@@ -40,12 +40,13 @@ class FlowBuilderTabMixin:
         hh.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
         self._flow_table.verticalHeader().setVisible(False)
         # 드롭다운(QComboBox) 셀이 기본 행 높이에 세로로 잘리지 않도록 충분히 키운다.
-        self._flow_table.verticalHeader().setDefaultSectionSize(36)
+        self._flow_table.verticalHeader().setDefaultSectionSize(38)
         self._flow_table.setColumnWidth(0, 55)
-        self._flow_table.setColumnWidth(1, 90)
-        self._flow_table.setColumnWidth(3, 130)
-        self._flow_table.setColumnWidth(4, 130)
+        self._flow_table.setColumnWidth(1, 100)
+        self._flow_table.setColumnWidth(3, 140)
+        self._flow_table.setColumnWidth(4, 150)
         self._flow_table.setColumnWidth(6, 70)
+        self._flow_table.setMinimumWidth(700)
         self._flow_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         layout.addWidget(self._flow_table)
 
