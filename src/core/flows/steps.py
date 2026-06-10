@@ -29,65 +29,151 @@ def click_coord(driver, thread, coord):
         thread._log(f"  [coord-err] click at {coord} failed: {exc}")
 
 
-class ClickSearchIcon(Step):
-    """Step 1: Click the search/magnifying-glass icon in the sidebar."""
+# ── Template param expansion (flow_steps ``param``) ─────────────────────────────
+
+def _expand_param(ctx, param: str) -> str:
+    """Expand a flow_steps ``param`` template against the live context.
+
+    Supports ``#{keyword}`` / ``{keyword}`` / ``{tag_index}`` / ``{posts_per_tag}``.
+    Unknown placeholders are left intact. Returns the raw param when no template
+    markers are present (so plain literals/delay keys pass through unchanged)."""
+    if not param:
+        return ""
+    t = ctx.thread
+    mapping = {
+        "keyword": getattr(ctx, "keyword", ""),
+        "tag_index": getattr(ctx, "tag_index", 0),
+        "posts_per_tag": getattr(t, "posts_per_tag", 0),
+    }
+    out = param
+    for key, val in mapping.items():
+        out = out.replace("#{" + key + "}", "#" + str(val))
+        out = out.replace("{" + key + "}", str(val))
+    return out
+
+
+class ClickStep(Step):
+    """Click the element resolved from ``selector_ref`` (coord fallback).
+
+    Generalizes the original Step 1 (search icon). When ``selector_ref`` is the
+    default ``search_icon`` and ``log_index`` is 1 the behavior — including the
+    ``[1] search icon clicked`` log — is byte-for-byte identical."""
+
+    def __init__(self, selector_ref: str = "search_icon", param: str = "",
+                 log_index=1):
+        self.selector_ref = selector_ref
+        self.param = param
+        self.log_index = log_index
 
     def execute(self, ctx) -> Outcome:
         t, driver = ctx.thread, ctx.driver
-        el = t._resolve_selector(driver, "search_icon")
+        ref = self.selector_ref or "search_icon"
+        el = t._resolve_selector(driver, ref)
         if el is None:
-            raise RuntimeError("search_icon selector chain exhausted")
+            raise RuntimeError(f"{ref} selector chain exhausted")
         if isinstance(el, tuple) and el[0] == "coord":
             click_coord(driver, t, el[1])
         else:
             el.click()
-        t._log("  [1] search icon clicked")
+        if ref == "search_icon":
+            t._log("  [1] search icon clicked")
+        else:
+            t._log(f"  [{self.log_index}] clicked {ref}")
         return Outcome.CONTINUE
 
 
-class TypeSearch(Step):
-    """Step 2: Type the hashtag keyword in the search input."""
+class TypeStep(Step):
+    """Type ``param`` (template-expanded) into the input from ``selector_ref``.
+
+    Generalizes the original Step 2. With the defaults (``search_input`` /
+    ``#{keyword}``) it types ``#<keyword>`` and logs ``[2] typed #<keyword>``
+    exactly as before."""
+
+    def __init__(self, selector_ref: str = "search_input", param: str = "#{keyword}",
+                 log_index=2):
+        self.selector_ref = selector_ref
+        self.param = param
+        self.log_index = log_index
 
     def execute(self, ctx) -> Outcome:
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
         t, driver = ctx.thread, ctx.driver
-        by, value = t._get_by("search_input")
+        by, value = t._get_by(self.selector_ref or "search_input")
         wait = WebDriverWait(driver, 10)
         inp = wait.until(EC.presence_of_element_located((by, value)))
         inp.clear()
-        t._human_type(inp, f"#{ctx.keyword}")
-        t._log(f"  [2] typed #{ctx.keyword}")
+        text = _expand_param(ctx, self.param if self.param else "#{keyword}")
+        t._human_type(inp, text)
+        t._log(f"  [{self.log_index}] typed {text}")
         return Outcome.CONTINUE
 
 
-class ClickTagSuggestion(Step):
-    """Step 3: Click the index-th tag suggestion.
+class ClickIndexStep(Step):
+    """Click the index-th matched element of ``selector_ref``.
 
-    Returns CONTINUE on success, NEXT_TAG when the suggestion is unavailable.
-    """
+    Generalizes the original Step 3. The index comes from ``param`` (template-
+    expanded — default ``{tag_index}``) and falls back to ``ctx.tag_index``.
+    Returns NEXT_TAG when the suggestion is unavailable, matching the original
+    ``[3]`` logs."""
+
+    def __init__(self, selector_ref: str = "tag_result", param: str = "{tag_index}",
+                 log_index=3):
+        self.selector_ref = selector_ref
+        self.param = param
+        self.log_index = log_index
+
+    def _index(self, ctx) -> int:
+        raw = _expand_param(ctx, self.param) if self.param else ""
+        try:
+            return int(str(raw).strip())
+        except (ValueError, TypeError):
+            return ctx.tag_index
 
     def execute(self, ctx) -> Outcome:
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
         t, driver = ctx.thread, ctx.driver
-        index = ctx.tag_index
-        by, value = t._get_by("tag_result")
+        index = self._index(ctx)
+        by, value = t._get_by(self.selector_ref or "tag_result")
         try:
             wait = WebDriverWait(driver, 10)
             wait.until(EC.presence_of_element_located((by, value)))
             time.sleep(0.6)   # let all suggestions load
             tags = driver.find_elements(by, value)
             if index >= len(tags):
-                t._log(f"  [3] only {len(tags)} tag(s) found, need index {index}")
+                t._log(f"  [{self.log_index}] only {len(tags)} tag(s) found, need index {index}")
                 return Outcome.NEXT_TAG
             label = tags[index].text.strip()
             tags[index].click()
-            t._log(f"  [3] clicked tag suggestion [{index}]: {label!r}")
+            t._log(f"  [{self.log_index}] clicked tag suggestion [{index}]: {label!r}")
             return Outcome.CONTINUE
         except Exception as exc:
-            t._log(f"  [3-err] {exc}")
+            t._log(f"  [{self.log_index}-err] {exc}")
             return Outcome.NEXT_TAG
+
+
+# ── Backward-compatible aliases (fixed step_id defaults) ────────────────────────
+
+class ClickSearchIcon(ClickStep):
+    """Step 1 alias: click the search icon (``search_icon`` chain, coord fallback)."""
+
+    def __init__(self):
+        super().__init__(selector_ref="search_icon", log_index=1)
+
+
+class TypeSearch(TypeStep):
+    """Step 2 alias: type ``#{keyword}`` into the search input."""
+
+    def __init__(self):
+        super().__init__(selector_ref="search_input", param="#{keyword}", log_index=2)
+
+
+class ClickTagSuggestion(ClickIndexStep):
+    """Step 3 alias: click the ``ctx.tag_index``-th tag suggestion."""
+
+    def __init__(self):
+        super().__init__(selector_ref="tag_result", param="{tag_index}", log_index=3)
 
 
 class CollectPostUrls(Step):
@@ -336,4 +422,64 @@ class SaveResult(Step):
             f"[{ctx.collected}/{t.count}]"
         )
         t._save_state(ctx.tag_index, ctx.post_index + 1)
+        return Outcome.CONTINUE
+
+
+# ── New navigation Steps (260610-4) ─────────────────────────────────────────────
+
+class OpenHomeIfNeeded(Step):
+    """Navigate to the Instagram home page unless already on instagram.com.
+
+    Lifts the inline ``if "instagram.com" not in driver.current_url`` guard that
+    preceded Step 1 in the original HashtagFlow — same URL and 2s settle."""
+
+    def execute(self, ctx) -> Outcome:
+        driver = ctx.driver
+        if "instagram.com" not in driver.current_url:
+            driver.get("https://www.instagram.com/")
+            time.sleep(2)
+        return Outcome.CONTINUE
+
+
+class GoBackStep(Step):
+    """Return to the tag grid (default) or use the browser back button.
+
+    Default (``param`` empty / ``grid``) reproduces the original
+    ``driver.get(tag_grid_url)`` return; ``param == "back"`` calls
+    ``driver.back()``. The post-back delay is driven by the Flow, not here."""
+
+    def __init__(self, selector_ref: str = "", param: str = ""):
+        self.selector_ref = selector_ref
+        self.param = param
+
+    def execute(self, ctx) -> Outcome:
+        driver = ctx.driver
+        mode = (self.param or "").strip().lower()
+        if mode == "back":
+            try:
+                driver.back()
+            except Exception as exc:
+                ctx.thread._log(f"  [back-err] {exc}")
+        else:
+            if ctx.tag_grid_url:
+                driver.get(ctx.tag_grid_url)
+        return Outcome.CONTINUE
+
+
+class ScrollStep(Step):
+    """Random vertical scroll on the current page (used to load more content)."""
+
+    def __init__(self, selector_ref: str = "", param: str = ""):
+        self.selector_ref = selector_ref
+        self.param = param
+
+    def execute(self, ctx) -> Outcome:
+        import random as _random
+        t, driver = ctx.thread, ctx.driver
+        amount = _random.randint(600, 1400)
+        try:
+            driver.execute_script(f"window.scrollBy(0, {amount});")
+            t._log(f"  [scroll] {amount}px")
+        except Exception as exc:
+            t._log(f"  [scroll-err] {exc}")
         return Outcome.CONTINUE
