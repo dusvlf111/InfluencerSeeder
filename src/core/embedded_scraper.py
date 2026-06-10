@@ -296,6 +296,25 @@ def parse_profile(data: dict) -> dict:
     return out
 
 
+# ── 현재 위치(페이지) → 재개 진입점 매핑 ────────────────────────────────────────
+# '지금 창이 어느 플로우에 있는지' 확인해 거기서부터 다시 시작하기 위한 라우팅.
+# 이 매핑이 동작 정책의 단일 출처 — 여기를 고치면 재개 동작이 바뀐다.
+#   search  : 검색 아이콘부터(기본; home/login/post/unknown)
+#   tag     : 검색결과(explore)에서 태그 제안 클릭부터 (해시태그 모드)
+#   grid    : 태그 그리드에서 게시물 수집부터 (검색 생략)
+#   kw      : 검색결과(계정 목록)에서 프로필 클릭부터 (캡션 키워드 모드)
+#   profile : 이미 프로필 페이지 → 현재 프로필 수집부터
+def resume_entry(page: str, mode: str) -> str:
+    page = (page or "").lower()
+    if page == "tag":
+        return "grid"
+    if page == "explore":
+        return "kw" if mode == "keyword" else "tag"
+    if page == "profile":
+        return "profile"
+    return "search"
+
+
 # ── JS 함수 본문(헬퍼) ──────────────────────────────────────────────────────────
 
 _FIND_FN = """(function(){
@@ -466,9 +485,11 @@ class EmbeddedScraper(QObject):
         self.step_signal.emit(msg)
         self._log(f"[step] {msg}")
 
-    # 단계 간 딜레이 하한(초). typing_char(글자당)는 제외하고 모두 최소 1초 이상
-    # 보장 — 기존 delays.csv 값이 작아도 확실히 텀을 둔다.
-    _MIN_DELAY_SEC = 1.0
+    # 단계 간 딜레이 하한(초). typing_char(글자당)는 제외하고 모두 최소 하한 보장 —
+    # 기존 delays.csv 값이 작아도 확실히 텀을 둔다. 캡쳐(screenshot)는 화면이 완전히
+    # 그려진 뒤 찍히도록 더 높은 하한을 둔다.
+    _MIN_DELAY_SEC = 1.5
+    _MIN_DELAY_BY_KEY = {"screenshot": 3.5}
 
     def _rand_ms(self, key) -> int:
         import random
@@ -478,7 +499,7 @@ class EmbeddedScraper(QObject):
         except (TypeError, ValueError):
             lo, hi = 1.5, 3.0
         if key != "typing_char":
-            lo = max(lo, self._MIN_DELAY_SEC)
+            lo = max(lo, self._MIN_DELAY_BY_KEY.get(key, self._MIN_DELAY_SEC))
             hi = max(hi, lo + 0.5)
         if hi < lo:
             hi = lo
@@ -645,9 +666,44 @@ class EmbeddedScraper(QObject):
         self._seen = set(storage.seen_usernames()) | self._excluded
         self._keywords = _parse_keywords(self.search_term)
         self._kw_idx = 0
+        self._cur_keyword = self._keywords[0] if self._keywords else ""
         self._log("[browser] 임베디드 브라우저에서 수집을 시작합니다(클릭 방식).")
         self.login_ok_signal.emit()
-        QTimer.singleShot(500, self._next_keyword)
+        QTimer.singleShot(500, self._resume_or_start)
+
+    def _resume_or_start(self):
+        """현재 브라우저가 어느 페이지(=플로우 어디)에 있는지 확인하고 거기서부터
+        시작한다('지금 위치 확인' 플로우). 라우팅 정책은 모듈의 resume_entry()."""
+        if not self._running:
+            return
+        self._page_state(self._route_from_page)
+
+    def _route_from_page(self, page):
+        entry = resume_entry(page, self.mode)
+        self._log(f"  [page] 현재 위치: {page} → 진입 단계: {entry}")
+        if entry == "search" or not self._keywords:
+            return self._next_keyword()
+        # 검색을 건너뛰고 중간부터 시작 → 첫 키워드를 '소비한' 상태로 맞춘다.
+        self._cur_keyword = self._keywords[0]
+        self._kw_idx = 1
+        if entry == "grid":
+            self._grid_tries = 0
+            return self._count_posts()
+        if entry == "tag":
+            return self._do_tag()
+        if entry == "kw":
+            return self._kw_start()
+        if entry == "profile":
+            return self._resume_profile()
+        return self._next_keyword()
+
+    def _resume_profile(self):
+        """이미 프로필 페이지 → 현재 프로필을 수집한 뒤 다음 키워드로 진행."""
+        self._step("현재 프로필 정보 수집(재개)")
+        self._wait_profile(
+            self._WAIT_TRIES,
+            lambda data: self._save_info(parse_profile(data or {}), self._next_keyword),
+        )
 
     def _finish(self):
         if not self._running:
@@ -761,14 +817,28 @@ class EmbeddedScraper(QObject):
             return self._after("step4", self._open_post)
         self._after("step4", self._peek)
 
-    def _peek(self):
-        self._js(_PEEK_USERNAME_JS, self._after_peek)
+    _PEEK_TRIES = 4   # 작성자 링크가 늦게 뜰 수 있어 username 을 몇 번 재시도
+
+    def _peek(self, left=None):
+        if left is None:
+            left = self._PEEK_TRIES
+        self._js(_PEEK_USERNAME_JS, lambda u: self._on_peek(u, left))
+
+    def _on_peek(self, username, left):
+        # username 을 못 읽으면(게시물 로딩 지연) 잠깐 기다렸다 재시도 — 제외/기존
+        # 계정을 프로필에 들어가기 전에 확실히 걸러내기 위함.
+        norm = (username or "").lstrip("@").strip().lower() if username else ""
+        if not norm and left > 0 and self._running:
+            self._sleep(self._WAIT_MS, lambda: self._peek(left - 1))
+            return
+        self._after_peek(username)
 
     def _after_peek(self, username):
         norm = (username or "").lstrip("@").strip().lower() if username else ""
+        # 제외 명단 / 이미 수집된 계정 → 프로필로 들어가지 않고 다음 이미지로.
         if norm and norm in self._seen:
             self.skip_signal.emit(norm)
-            self._log(f"  [skip] 중복 건너뜀: @{norm}")
+            self._log(f"  [skip] 제외/중복 — 프로필 진입 안 함: @{norm}")
             self._post_idx += 1
             return self._go_back_to_listing(self._open_post)
         # 프로필 진입(이름 클릭)

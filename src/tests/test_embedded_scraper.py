@@ -1,9 +1,11 @@
 """Unit tests for embedded_scraper pure helpers (no QtWebEngine needed)."""
 
+import pytest
+
 from core.embedded_scraper import (
     candidates_for, build_click_js, build_type_js, build_click_index_js,
     build_count_js, dismiss_popup_js, parse_profile, _num_for, _parse_keywords,
-    build_profile_js, _clean_num,
+    build_profile_js, _clean_num, resume_entry,
 )
 from core.scraper_parsing import parse_followers
 
@@ -59,6 +61,48 @@ class TestJsBuilders:
         # __txt 가 빈 매칭에서 멈추지 않고 다음 후보를 시도하도록 루프로 생성된다.
         js = build_profile_js([])
         assert "for (var i = 0; i < cands.length; i++)" in js
+
+
+class TestResumeEntry:
+    """현재 페이지(page_state) → 재개 진입점 라우팅."""
+
+    def test_tag_grid_to_grid(self):
+        assert resume_entry("tag", "hashtag") == "grid"
+
+    def test_explore_hashtag_to_tag(self):
+        assert resume_entry("explore", "hashtag") == "tag"
+
+    def test_explore_keyword_to_kw(self):
+        assert resume_entry("explore", "keyword") == "kw"
+
+    def test_profile_to_profile(self):
+        assert resume_entry("profile", "hashtag") == "profile"
+        assert resume_entry("profile", "keyword") == "profile"
+
+    @pytest.mark.parametrize("page", ["home", "login", "post", "unknown", "", None])
+    def test_default_is_search(self, page):
+        assert resume_entry(page, "hashtag") == "search"
+
+
+class TestDelayFloor:
+    def _scraper(self, delays):
+        from core.embedded_scraper import EmbeddedScraper
+        s = EmbeddedScraper.__new__(EmbeddedScraper)
+        s._delays = delays
+        return s
+
+    def test_screenshot_has_higher_floor(self):
+        # 캡쳐 전 대기는 작은 값이어도 최소 3.5s 보장.
+        s = self._scraper({"screenshot": (1.0, 1.2)})
+        assert s._rand_ms("screenshot") >= 3500
+
+    def test_step_floor_applied(self):
+        s = self._scraper({"step3": (0.2, 0.3)})
+        assert s._rand_ms("step3") >= 1500
+
+    def test_typing_not_floored(self):
+        s = self._scraper({"typing_char": (0.10, 0.20)})
+        assert s._rand_ms("typing_char") <= 300
 
 
 class TestTargetRejectReason:

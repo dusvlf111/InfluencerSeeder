@@ -34,7 +34,8 @@ class ProfileDetailDialog(QDialog):
         self._index = max(0, min(int(index), n - 1)) if n else 0
         self.setMinimumSize(940, 600)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        # 항상-위(StaysOnTop) 는 두지 않는다 — [URL 이동] 으로 브라우저를 열었을 때
+        # 모달이 그 위를 덮어 브라우저가 안 보이던 문제를 막는다.
         self._build_ui()
         self._render()
 
@@ -122,6 +123,8 @@ class ProfileDetailDialog(QDialog):
         url = self._current_url()
         if url:
             QDesktopServices.openUrl(QUrl(url))
+            # 모달을 뒤로 내려 열린 브라우저가 가려지지 않게 한다.
+            self.lower()
 
     # ── 렌더링 / 네비게이션 ────────────────────────────────────────────────────
     def _render(self):

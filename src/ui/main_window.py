@@ -23,8 +23,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("인플루언서 시딩기")
         # 소개 컬럼 제거로 결과표가 좁아져 전체 폭을 줄임(좌우 컴팩트).
-        self.setMinimumSize(1040, 720)
-        self.resize(1180, 880)
+        # 최소 높이는 작은 노트북 화면(작업표시줄 포함)에서도 안 잘리게 낮춘다.
+        self.setMinimumSize(1000, 600)
+        self._size_to_screen(1180, 860)
         if icon and not icon.isNull():
             self.setWindowIcon(icon)
 
@@ -43,11 +44,33 @@ class MainWindow(QMainWindow):
         self._browser = None  # BrowserPanel (WebEngine이 있을 때만)
         self._build_ui()
         self._setup_tray()
+        self.move_to_center()
         # 시작 시 기존 누적 결과(results.csv)를 표에 표시.
         try:
             self._results.load_existing()
         except Exception:
             pass
+
+    def _size_to_screen(self, w: int, h: int):
+        """창 크기를 사용 가능한 화면(작업표시줄 제외) 안으로 제한 — 세로가 화면보다
+        길어 잘리는 것을 방지."""
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            w = min(w, avail.width() - 40)
+            h = min(h, avail.height() - 40)
+        self.resize(max(w, 900), max(h, 560))
+
+    def move_to_center(self):
+        """현재 창을 사용 가능한 화면 중앙에 배치(상단 잘림 방지로 y 는 0 이상)."""
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        avail = screen.availableGeometry()
+        fg = self.frameGeometry()
+        x = avail.x() + (avail.width() - fg.width()) // 2
+        y = avail.y() + (avail.height() - fg.height()) // 2
+        self.move(max(avail.x(), x), max(avail.y(), y))
 
     def _build_ui(self):
         self._stack = QStackedWidget()
@@ -305,15 +328,32 @@ class MainWindow(QMainWindow):
             )
             self._run_logger.close()
             self._run_logger = None
+        collected = self._results.collected_count()
         if self._scrape_had_error:
             self._results.set_status("오류 발생 - 로그 확인")
             self._results.show_log_tab()
             self._notify_tray("수집 중단", "오류가 발생했습니다 - 로그를 확인하세요")
+            title, body = "수집 중단", "오류가 발생했습니다.\n로그 탭을 확인하세요."
         else:
             self._results.set_status("완료!")
             self._results.show_results_tab()
-            self._notify_tray("수집 완료", f"{self._results.collected_count()}명 수집 완료")
+            self._notify_tray("수집 완료", f"{collected}명 수집 완료")
+            title, body = "수집 완료", f"총 {collected}명 수집했습니다.\n(중복 건너뜀 {self._skip_count})"
         self._refresh_resume()
+        # 완료 알림을 화면 맨 앞에 — 최소화/뒤에 있어도 바로 확인되도록 창을 띄우고
+        # 모달을 앞에 표시한다.
+        self._bring_to_front()
+        QMessageBox.information(self, title, body)
+
+    def _bring_to_front(self):
+        """창을 복원하고 최상단으로 끌어올린다(완료 알림이 바로 보이도록)."""
+        try:
+            self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+            self.showNormal()
+            self.raise_()
+            self.activateWindow()
+        except Exception:
+            pass
 
     def _on_waiting_login(self):
         self._control.set_running(True, waiting_login=True)

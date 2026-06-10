@@ -99,6 +99,25 @@ class TestTray:
         # 않도록 — 종료는 메인 창 closeEvent 의 명시 quit() 로만.
         assert qapp.quitOnLastWindowClosed() is False
 
+    def test_window_fits_screen_height(self, window, qapp):
+        # 시작 크기가 사용 가능한 화면 높이를 넘지 않아야(세로 잘림 방지).
+        avail = qapp.primaryScreen().availableGeometry()
+        assert window.height() <= avail.height()
+
+    def test_completion_brings_front_and_popup(self, window):
+        window._results.add_result({"username": "a"})
+        window._scrape_had_error = False
+        with patch("ui.main_window.QMessageBox.information") as info:
+            window._on_done()
+        info.assert_called_once()
+        assert window._control._btn_start.isEnabled() is True
+
+    def test_completion_popup_on_error_too(self, window):
+        window._scrape_had_error = True
+        with patch("ui.main_window.QMessageBox.information") as info:
+            window._on_done()
+        info.assert_called_once()
+
     def test_close_quits_even_with_tray(self, window):
         # 닫기(X)는 트레이 유무와 관계없이 완전 종료 (event.accept).
         window._tray = MagicMock()
@@ -281,6 +300,12 @@ class TestProfileDetailDialog:
         d = self._dlg(qapp, [])
         assert d._btn_next.isEnabled() is False
         assert d._btn_prev.isEnabled() is False
+
+    def test_not_always_on_top(self, qapp):
+        # URL 이동 시 브라우저가 모달에 가리지 않도록 StaysOnTop 을 두지 않는다.
+        from PyQt6.QtCore import Qt
+        d = self._dlg(qapp, [{"username": "alice"}], 0)
+        assert not (d.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
 
     def test_url_buttons_copy_and_state(self, qapp):
         results = [
