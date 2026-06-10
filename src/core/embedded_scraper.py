@@ -22,10 +22,11 @@ from core.scraper_parsing import parse_followers, _BLACKLISTED_PATHS
 
 _HOME_URL = "https://www.instagram.com/"
 
-# 모달/팝업 닫기 후보 라벨(있으면 클릭).
+# 모달/팝업 '나중에/거절' 류 라벨만(검색 닫기·취소 등 일반 닫기 버튼은 제외 —
+# 그걸 누르면 검색창이 닫혀버린다). 알림 켜기/로그인정보 저장 팝업만 닫는다.
 _DISMISS_LABELS = [
-    "Not Now", "Not now", "나중에 하기", "나중에", "닫기", "취소",
-    "Cancel", "Dismiss", "나중에 다시 알림", "지금 안 함",
+    "Not Now", "Not now", "나중에 하기", "나중에", "나중에 다시 알림",
+    "지금 안 함", "정보 저장 안 함",
 ]
 
 
@@ -208,6 +209,8 @@ def parse_profile(data: dict) -> dict:
     if not username or username in _BLACKLISTED_PATHS:
         return {}
     out["username"] = username
+    # 프로필 진입 후의 실제 URL 을 기록(없으면 표준형으로 구성).
+    out["profile_url"] = url if url.startswith("http") else f"https://www.instagram.com/{username}/"
 
     # DOM 필드(build_profile_js) 우선, 없으면 meta description 폴백.
     content = data.get("meta") or ""

@@ -247,16 +247,29 @@ class ResultsPanel(QWidget):
             link_item.setToolTip(target)
         self._table.setItem(row, 6, link_item)
 
-    def reset(self):
+    def load_existing(self):
+        """기존 results.csv 를 표에 불러와 누적분이 항상 보이게 한다."""
+        try:
+            rows = storage.load_results()
+        except Exception:
+            rows = []
         self._results = []
         self._table.setRowCount(0)
-        self._count_label.setText("0 collected")
+        for info in rows:
+            self._results.append(info)
+            self._add_table_row(info)
+        self._count_label.setText(f"{len(self._results)} collected")
+
+    def reset(self):
+        # 로그/진행만 초기화하고, 결과 표는 누적분(csv)을 다시 보여준다
+        # (새 수집을 시작해도 이전 결과가 사라지지 않도록).
         self._log_text.clear()
         self._progress_bar.setValue(0)
         self._step_label.setText("Waiting to start")
         self._cur_step = ""
         self._skip_count = 0
-        self._update_progress_label()
+        self.load_existing()          # self._results 를 csv 누적분으로 갱신
+        self._update_progress_label()  # 그 후 라벨 갱신(누적 수 반영)
 
     def show_log_tab(self):
         self._tabs.setCurrentIndex(1)

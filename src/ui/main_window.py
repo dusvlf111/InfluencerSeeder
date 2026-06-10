@@ -35,6 +35,11 @@ class MainWindow(QMainWindow):
         self._browser = None  # BrowserPanel (WebEngine이 있을 때만)
         self._build_ui()
         self._setup_tray()
+        # 시작 시 기존 누적 결과(results.csv)를 표에 표시.
+        try:
+            self._results.load_existing()
+        except Exception:
+            pass
 
     def _build_ui(self):
         self._stack = QStackedWidget()

@@ -40,7 +40,8 @@ class TestJsBuilders:
 
     def test_dismiss_js_lists_labels(self):
         js = dismiss_popup_js()
-        assert "Not Now" in js and "닫기" in js
+        # 검색 닫기 버튼을 누르지 않도록 '닫기/취소'는 제외, '나중에' 류만.
+        assert "Not Now" in js and "나중에" in js and "닫기" not in js
 
     def test_profile_js_uses_field_selectors(self):
         sels = [{"step_id": "followers_count", "selector_type": "css",
