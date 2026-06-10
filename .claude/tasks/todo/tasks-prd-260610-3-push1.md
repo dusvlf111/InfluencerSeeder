@@ -66,7 +66,7 @@
 
 ## 작업
 
-- [ ] 1.0 storage.py 5분리 + dedup + state (Push 범위)
+- [x] 1.0 storage.py 5분리 + dedup + state (Push 범위)
 
     - [x] 1.1 web.csv — `load_web()` / `save_web(dict)`
         **작업 상세:** §2.1 스키마(key,value)로 `_WEB_DEFAULTS` 정의:
@@ -121,6 +121,6 @@
         - [x] 1.7.T1 pytest 테스트 (`class TestState`): 없을 때 load None, save→load round-trip, clear 후 load None, 손상 json load None, seen_usernames 리스트 보존.
         - [x] 1.7.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestState -v` 실행 및 검증
 
-    - [ ] 1.8 전체 회귀 검증
+    - [x] 1.8 전체 회귀 검증
         **작업 상세:** `cd src && .venv/bin/pytest tests/ -v` 실행. 기존 `test_scraper_utils.py` 가 깨지지 않는지 확인(이 Push 는 scraper 미수정). 기존 `test_storage.py` 의 stale 테스트(`max_scroll`, `sel_tab_recent` 등 현행 코드에 없는 키 참조)가 있으면 **현행 동작에 맞게 수정하거나 제거**하고 사유를 커밋 메시지에 기록.
-        - [ ] 1.8.T1 `cd src && .venv/bin/pytest tests/ -v` 전체 통과 확인
+        - [x] 1.8.T1 `cd src && .venv/bin/pytest tests/ -v` 전체 통과 확인
