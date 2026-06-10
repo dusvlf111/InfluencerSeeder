@@ -109,17 +109,18 @@ class TestResume:
     def test_start_scrape_clears_state_and_injects_no_resume(self, window):
         storage.save_state({"keyword": "old", "tag_index": 5})
         window._control._search_input.setText("인턴")
+        window._browser = MagicMock()   # 임베디드 브라우저 존재로 가정
         params = window._control.collect_params()
-        with patch("ui.main_window.ScraperThread") as MockThread:
-            inst = MockThread.return_value
+        with patch("core.embedded_scraper.EmbeddedScraper") as MockScraper:
+            inst = MockScraper.return_value
             inst.isRunning.return_value = False
             window._start_scrape(params)
         # 신규 시작 → state.json 비워짐
         assert storage.load_state() is None
-        kwargs = MockThread.call_args.kwargs
+        kwargs = MockScraper.call_args.kwargs
         assert kwargs["resume_state"] is None
-        # config 그룹 주입(Push2 생성자 시그니처)
-        for key in ("web", "delays", "flow", "target"):
+        # config 그룹 주입(flow/target)
+        for key in ("flow", "target"):
             assert key in kwargs
 
     def test_resume_injects_resume_state(self, window):
@@ -127,20 +128,22 @@ class TestResume:
                  "collected_count": 7, "seen_usernames": ["a", "b"]}
         storage.save_state(state)
         window._control._search_input.setText("placeholder")
-        with patch("ui.main_window.ScraperThread") as MockThread:
-            inst = MockThread.return_value
+        window._browser = MagicMock()
+        with patch("core.embedded_scraper.EmbeddedScraper") as MockScraper:
+            inst = MockScraper.return_value
             inst.isRunning.return_value = False
             window._resume_scrape()
-        kwargs = MockThread.call_args.kwargs
+        kwargs = MockScraper.call_args.kwargs
         assert kwargs["resume_state"] == state
         # keyword from state overrides search term
         assert kwargs["search_term"] == "인턴"
 
     def test_resume_noop_without_state(self, window):
         storage.clear_state()
-        with patch("ui.main_window.ScraperThread") as MockThread:
+        window._browser = MagicMock()
+        with patch("core.embedded_scraper.EmbeddedScraper") as MockScraper:
             window._resume_scrape()
-        MockThread.assert_not_called()
+        MockScraper.assert_not_called()
 
 
 # ── 4.4 Blocked + Skip ───────────────────────────────────────────────────────

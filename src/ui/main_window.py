@@ -6,7 +6,6 @@ from PyQt6.QtWidgets import (
 )
 
 import core.storage as storage
-from core.scraper import ScraperThread
 from core.run_logger import RunLogger
 from ui.panels.control_panel import ControlPanel
 from ui.panels.results_panel import ResultsPanel
@@ -27,7 +26,7 @@ class MainWindow(QMainWindow):
         if icon and not icon.isNull():
             self.setWindowIcon(icon)
 
-        self._scraper: ScraperThread | None = None
+        self._scraper = None  # EmbeddedScraper (or None)
         self._scrape_had_error = False
         self._run_logger: RunLogger | None = None
         self._tray: QSystemTrayIcon | None = None
@@ -70,9 +69,9 @@ class MainWindow(QMainWindow):
             outer.addWidget(browser_wrap)
         else:
             placeholder = QLabel(
-                "임베디드 브라우저 미지원\n\n"
-                "다음 패키지 설치 후 재시작:\n"
-                "sudo apt install libnspr4 libnss3"
+                "임베디드 브라우저(QtWebEngine) 미지원\n\n"
+                "PyQt6-WebEngine 설치 후 재시작:\n"
+                "pip install PyQt6-WebEngine"
             )
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             placeholder.setObjectName("labelMuted")
@@ -121,7 +120,7 @@ class MainWindow(QMainWindow):
         self._launch_scrape(params, resume_state=None)
 
     def _resume_scrape(self):
-        """[이어하기] — state.json 의 진행 상태를 ScraperThread 에 주입 (§7)."""
+        """[이어하기] — state.json 의 진행 상태를 스크래퍼에 주입 (§7)."""
         state = storage.load_state()
         if state is None:
             return
@@ -134,26 +133,12 @@ class MainWindow(QMainWindow):
         self._launch_scrape(params, resume_state=state)
 
     def _build_params(self, params: dict, resume_state: dict | None) -> dict:
-        """ScraperThread 생성자 시그니처(Push2)에 맞춰 config 그룹을 주입한다.
-
-        web/delays/flow/target 은 storage 에서 로드해 주입(생성자가 self-load 도
-        하지만, 명시 주입으로 [이어하기]/신규 경로를 통일). resume 이면 resume_state
-        를 넣는다.
-        """
+        """EmbeddedScraper 생성자에 넘길 config 를 구성. flow/target/selectors 는
+        storage 에서 로드해 주입한다(생성자도 self-load 하지만 경로 통일)."""
         merged = dict(params)
-        merged.setdefault("web", storage.load_web())
-        merged.setdefault("delays", storage.load_delays())
         merged.setdefault("flow", storage.load_flow())
         merged.setdefault("target", storage.load_target())
         merged["resume_state"] = resume_state
-        # 임베디드 브라우저 사용 시: Selenium은 헤드리스 + 모바일 UA로 숨김
-        if self._browser is not None:
-            merged["cookies"] = self._browser.get_selenium_cookies()
-            web = dict(merged.get("web") or {})
-            web["headless"] = "true"           # Chrome 창 숨김
-            web["randomize_user_agent"] = "false"
-            web["mobile_ua"] = "true"          # 모바일 UA (scraper_driver 처리)
-            merged["web"] = web
         return merged
 
     def _launch_scrape(self, params: dict, resume_state: dict | None):
@@ -176,13 +161,19 @@ class MainWindow(QMainWindow):
             self._run_logger = None
 
         full = self._build_params(params, resume_state)
-        # 임베디드 브라우저가 있으면 별도 Selenium Chrome 대신 그 안에서 직접 수집
-        # (클릭 방식, URL 이동 X). 없으면 기존 Selenium ScraperThread 로 폴백.
-        if self._browser is not None:
-            from core.embedded_scraper import EmbeddedScraper
-            self._scraper = EmbeddedScraper(self._browser, **full)
-        else:
-            self._scraper = ScraperThread(**full)
+        # 이미 열린 임베디드 브라우저에서 직접 수집(JS 클릭 방식). WebEngine 이
+        # 없으면 임베디드 브라우저가 없어 수집 불가 → 안내 후 중단.
+        if self._browser is None:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, "수집 불가",
+                "임베디드 브라우저(QtWebEngine)를 사용할 수 없습니다.\n"
+                "PyQt6-WebEngine 설치 후 다시 실행해주세요.",
+            )
+            self._control.set_running(False)
+            return
+        from core.embedded_scraper import EmbeddedScraper
+        self._scraper = EmbeddedScraper(self._browser, **full)
         self._scraper.log_signal.connect(self._results.append_log)
         self._scraper.log_signal.connect(self._log_to_file)
         self._scraper.step_signal.connect(self._on_step)

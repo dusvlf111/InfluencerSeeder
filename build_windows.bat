@@ -65,28 +65,7 @@ echo       Installed: !PYTHON_VERSION!
 
 :PYTHON_OK
 
-:: -------------------------------------------------------
-:: Step 1.5: Ensure Google Chrome (NSS dlls ship inside Chrome)
-:: -------------------------------------------------------
-echo.
-echo [*] Checking Google Chrome...
-set "CHROME_FOUND="
-if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
-if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
-if exist "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" set "CHROME_FOUND=1"
-if defined CHROME_FOUND (
-    echo       Found Google Chrome.
-    goto :CHROME_OK
-)
-echo       Chrome not found. Installing via winget...
-winget --version > nul 2>&1
-if errorlevel 1 (
-    echo [WARN] winget unavailable. Install Chrome from https://www.google.com/chrome/
-    goto :CHROME_OK
-)
-winget install Google.Chrome --silent --accept-package-agreements --accept-source-agreements
-if errorlevel 1 echo [WARN] Chrome install failed. Install from https://www.google.com/chrome/
-:CHROME_OK
+:: 수집은 임베디드 QtWebEngine(Chromium 내장) 브라우저에서 진행 — 시스템 Chrome 불필요.
 
 :: -------------------------------------------------------
 :: Step 2: Create virtual environment
