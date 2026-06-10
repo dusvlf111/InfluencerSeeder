@@ -161,6 +161,8 @@ class MainWindow(QMainWindow):
         self._control.set_running(True)
         self._scrape_had_error = False
         self._skip_count = 0
+        # 진행률 알림용: 통과한 마일스톤(%) 추적.
+        self._notified_milestones: set[int] = set()
 
         # Persistent run-log file (§8): created per run, closed on done.
         try:
@@ -180,6 +182,7 @@ class MainWindow(QMainWindow):
         self._scraper.log_signal.connect(self._log_to_file)
         self._scraper.step_signal.connect(self._on_step)
         self._scraper.progress_signal.connect(self._results.update_progress)
+        self._scraper.progress_signal.connect(self._on_progress)
         self._scraper.result_signal.connect(self._results.add_result)
         self._scraper.skip_signal.connect(self._on_skip)
         self._scraper.blocked_signal.connect(self._on_blocked)
@@ -240,6 +243,18 @@ class MainWindow(QMainWindow):
         self._results.set_step(step)
         if self._run_logger is not None:
             self._run_logger.write("STEP", step, step)
+
+    def _on_progress(self, done: int, total: int):
+        """progress_signal → 25/50/75% 마일스톤마다 트레이 알림(중복 없이 1회씩)."""
+        if total <= 0:
+            return
+        pct = int(done * 100 / total)
+        for m in (25, 50, 75):
+            if pct >= m and m not in self._notified_milestones:
+                self._notified_milestones.add(m)
+                self._notify_tray(
+                    "수집 진행 중", f"{m}% 완료 — {done}/{total}명 수집"
+                )
 
     def _on_skip(self, username: str):
         """skip_signal → 중복 skip 카운터 누적 + 진행 라벨 갱신 (§6)."""
