@@ -79,7 +79,11 @@ class MappingTabMixin:
                 img = QLabel()
                 img.setObjectName("guideImage")
                 img.setPixmap(
-                    pix.scaledToWidth(360, Qt.TransformationMode.SmoothTransformation)
+                    pix.scaled(
+                        220, 150,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
                 )
                 img.setAlignment(Qt.AlignmentFlag.AlignLeft)
                 cl.addWidget(img)
