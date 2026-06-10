@@ -87,6 +87,7 @@ _DELAY_DEFAULTS: list[tuple[str, tuple[float, float]]] = [
     ("back",        (1.5, 3.0)),
     ("scroll",      (1.0, 2.5)),
     ("typing_char", (0.10, 0.30)),
+    ("screenshot",  (2.0, 3.0)),
 ]
 
 # ── Selectors (§2.2) — step 당 priority 정렬 fallback 체인 ──────────────────────

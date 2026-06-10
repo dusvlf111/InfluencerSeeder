@@ -19,6 +19,7 @@ _DELAY_STEPS = [
     ("back",        "Return to Tag Grid"),
     ("scroll",      "Scroll (per scroll)"),
     ("typing_char", "Typing (per character)"),
+    ("screenshot",  "Profile Screenshot (before capture)"),
 ]
 
 

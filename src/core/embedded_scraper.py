@@ -814,6 +814,24 @@ class EmbeddedScraper(QObject):
             self._log(f"  [screenshot] 캡처 실패: {exc}")
         return ""
 
+    def _target_reject_reason(self, info: dict) -> str:
+        """타겟 범위(팔로워/팔로잉/게시물, target.csv §2.5)에 안 맞으면 사유 문자열,
+        통과하면 빈 문자열. 0 인 한계는 '무제한'으로 무시한다."""
+        f = parse_followers(info.get("followers", ""))
+        if (self.min_followers > 0 and f < self.min_followers) or \
+           (self.max_followers > 0 and f > self.max_followers):
+            return f"팔로워 {f:,} 범위 밖"
+        if self.min_following > 0 or self.max_following > 0:
+            fw = parse_followers(info.get("following", ""))
+            if (self.min_following > 0 and fw < self.min_following) or \
+               (self.max_following > 0 and fw > self.max_following):
+                return f"팔로잉 {fw:,} 범위 밖"
+        if self.min_posts > 0:
+            pc = parse_followers(info.get("posts_count", ""))
+            if pc < self.min_posts:
+                return f"게시물 {pc:,} 부족(<{self.min_posts:,})"
+        return ""
+
     def _save_info(self, info, after_cb):
         """프로필 dedup/필터/저장 처리 후 after_cb() 로 다음 단계 진행.
 
@@ -830,15 +848,20 @@ class EmbeddedScraper(QObject):
             self.skip_signal.emit(username)
             self._log(f"  [skip] 중복: @{norm}")
             return after_cb()
-        if self.min_followers > 0 or self.max_followers > 0:
-            f = parse_followers(info.get("followers", ""))
-            if (self.min_followers > 0 and f < self.min_followers) or \
-               (self.max_followers > 0 and f > self.max_followers):
-                self._log(f"  [filter] @{username} {f:,} 범위 밖")
-                self._seen.add(norm)
-                return after_cb()
+        reason = self._target_reject_reason(info)
+        if reason:
+            self._log(f"  [filter] @{username} {reason}")
+            self._seen.add(norm)
+            return after_cb()
         self._seen.add(norm)
-        # 프로필 페이지 캡처 (아직 이탈 전)
+        # 캡처 전 대기 (설정 딜레이 탭 "screenshot" 항목)
+        self._after("screenshot", lambda: self._do_capture_and_save(info, after_cb))
+
+    def _do_capture_and_save(self, info, after_cb):
+        """캡처 후 results.csv 에 저장하고 after_cb() 로 진행."""
+        import datetime
+        from core import storage
+        username = info["username"]
         shot_path = self._capture_screenshot(username)
         if shot_path:
             info["screenshot_path"] = shot_path
