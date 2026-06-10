@@ -1,123 +1,145 @@
-"""버튼매핑 탭 Mixin — 자유 편집 단일 테이블.
+"""버튼매핑 탭 Mixin — 스텝(플로우)별 그룹 + 스텝마다 여러 후보(순서대로 시도).
 
-가이드 이미지/스텝별 카드 구조를 제거하고, selectors.csv 전체를 하나의 자유
-편집 테이블로 다룬다. 각 행은 (Step ID 자유입력 | Step Name | Priority | Type |
-Selector Value). 임의의 step_id 를 추가해 flow_steps 의 selector_ref 와 연동할 수
-있다. 저장 데이터 계약은 기존 save_selectors(list[dict] with priority int) 를 그대로
-유지한다 — ``_collect_selectors()`` 가 priority int 를 포함한 list[dict] 를 반환한다.
+각 수집 스텝(step_id)을 하나의 그룹으로 보여주고, 그 안에 셀렉터 후보를 여러 개
+둘 수 있다. 수집 시 **위에서부터 차례로 시도**하다 처음 매칭되는 요소를 사용하고,
+실패하면 다음 후보로 넘어간다(core.scraper._resolve_selector 의 priority fallback).
+
+저장 계약은 기존 save_selectors(list[dict] with priority int) 를 그대로 유지한다 —
+``_collect_selectors()`` 가 그룹/행 순서를 priority(1..) 로 부여한 list[dict] 를 반환.
 """
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QComboBox, QScrollArea,
+    QComboBox, QScrollArea, QGroupBox,
 )
 
 import core.storage as storage
 
-# 자유 편집 테이블 컬럼.
-_MAP_COLS = ["Step ID", "Step Name", "Priority", "Type", "Selector Value"]
-
 # Type 셀 드롭다운 항목.
 _MAP_TYPES = ["xpath", "css", "coord"]
 
-# 상단 안내(이미지 없이).
+# 표준 수집 스텝(플로우) 순서 + 표시 라벨. 저장된 데이터에 없어도 항상 보여줘
+# 사용자가 후보를 추가할 수 있게 한다. 여기 없는 step_id 는 뒤에 추가로 표시.
+_FLOW_STEPS = [
+    ("search_icon",     "1. 검색/탐색 아이콘 클릭"),
+    ("search_input",    "2. 검색어 입력창"),
+    ("tag_result",      "3. 태그 검색결과 클릭"),
+    ("post_link",       "4. 게시물(이미지) 링크"),
+    ("profile_link",    "5. 프로필 이름/링크 클릭"),
+    ("username_text",   "유저네임 텍스트"),
+    ("followers_count", "팔로워 수"),
+    ("following_count", "팔로우 수"),
+    ("posts_count",     "게시물 수"),
+    ("bio_text",        "소개글"),
+    ("website_link",    "웹사이트"),
+]
+_FLOW_LABELS = dict(_FLOW_STEPS)
+
 _MAPPING_NOTE = (
-    "브라우저에서 요소 우클릭 → 검사(Inspect) → 강조된 요소 우클릭 → "
-    "Copy → Copy XPath(또는 Copy selector) → [Selector Value] 칸에 붙여넣기.  "
-    "Type 은 xpath / css / coord.  Step ID 는 자유롭게 입력하며 플로우의 "
-    "selector_ref 와 연동됩니다.  같은 Step ID 는 Priority 순으로 시도됩니다."
+    "스텝마다 셀렉터 후보를 여러 개 둘 수 있습니다. 수집 시 위에서부터 차례로 "
+    "시도하고, 위치를 못 찾으면 다음 후보로 넘어갑니다(실패하면 그 다음).  "
+    "브라우저에서 요소 우클릭 → 검사 → Copy → Copy XPath / Copy selector 로 값을 "
+    "복사해 [Selector Value] 에 붙여넣으세요. Type 은 xpath / css / coord."
 )
 
 
 class MappingTabMixin:
+    # ── Build ───────────────────────────────────────────────────────────────────
+
     def _build_mapping_tab(self) -> QWidget:
-        w = QWidget()
-        outer = QVBoxLayout(w)
+        # 그룹 디스크립터: [{"step_id","step_name","table"}]
+        self._mapping_groups = []
+
+        container = QWidget()
+        outer = QVBoxLayout(container)
         outer.setContentsMargins(12, 12, 12, 12)
-        outer.setSpacing(8)
+        outer.setSpacing(10)
 
         note = QLabel(_MAPPING_NOTE)
         note.setObjectName("labelMuted")
         note.setWordWrap(True)
         outer.addWidget(note)
 
-        table = QTableWidget(0, len(_MAP_COLS))
-        table.setHorizontalHeaderLabels(_MAP_COLS)
-        header = table.horizontalHeader()
-        # 고정폭으로 보기 좋게(콤보/편집이 잘리지 않도록). Value 만 Stretch 유지.
-        # Step ID: Interactive, Step Name: Stretch(긴 한국어 이름 수용), Priority/Type: Interactive
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
-        table.setColumnWidth(0, 130)   # Step ID
-        table.setColumnWidth(2, 55)    # Priority (숫자)
-        table.setColumnWidth(3, 80)    # Type (xpath/css/coord)
-        table.setColumnWidth(4, 220)   # Selector Value (기본폭, 드래그로 확장 가능)
-        header.setMinimumSectionSize(55)
-        table.setMinimumWidth(600)
-        table.verticalHeader().setVisible(False)
-        # 긴 셀렉터 값이 잘리지 않도록: 행 높이를 컨텐츠에 맞게 자동 조절
-        table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        table.verticalHeader().setDefaultSectionSize(44)
-        table.setWordWrap(True)
-        table.setMinimumHeight(560)
-        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self._mapping_table = table
-        outer.addWidget(table)
+        # 그룹 박스들이 들어갈 호스트 레이아웃(_populate_mapping 이 채운다).
+        self._mapping_host = QVBoxLayout()
+        self._mapping_host.setSpacing(12)
+        outer.addLayout(self._mapping_host)
 
-        # 행 조작 버튼.
-        btn_row = QHBoxLayout()
-        btn_add = QPushButton("행 추가")
-        btn_add.clicked.connect(self._mapping_add_row)
-        btn_del = QPushButton("행 삭제")
-        btn_del.clicked.connect(self._mapping_del_row)
-        btn_up = QPushButton("위로")
-        btn_up.clicked.connect(lambda: self._mapping_move_row(-1))
-        btn_down = QPushButton("아래로")
-        btn_down.clicked.connect(lambda: self._mapping_move_row(1))
-        btn_reset = QPushButton("기본값으로 초기화")
+        # 하단: 임의 step_id 그룹 추가 + 전체 기본값 초기화.
+        bottom = QHBoxLayout()
+        btn_add_step = QPushButton("+ 스텝(step_id) 추가")
+        btn_add_step.clicked.connect(self._mapping_add_step)
+        btn_reset = QPushButton("전체 기본값으로 초기화")
         btn_reset.clicked.connect(self._mapping_reset)
-        for b in (btn_add, btn_del, btn_up, btn_down, btn_reset):
-            btn_row.addWidget(b)
-        btn_row.addStretch()
-        outer.addLayout(btn_row)
+        bottom.addWidget(btn_add_step)
+        bottom.addStretch()
+        bottom.addWidget(btn_reset)
+        outer.addLayout(bottom)
+        outer.addStretch()
 
-        # 고정 390x844 창에서 테이블/버튼이 잘리지 않도록 전체를 스크롤 영역에 둔다.
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setWidget(w)
+        scroll.setWidget(container)
         return scroll
 
-    def _populate_mapping(self, selectors: list):
-        """Fill the free-form table from a (priority-sorted) selector list.
+    # ── Group widget ─────────────────────────────────────────────────────────────
 
-        ``selectors`` follows storage.load_selectors() — already priority-sorted
-        with step_id first-appearance order preserved.
-        """
-        table = self._mapping_table
-        table.setRowCount(0)
-        for row in selectors:
-            sid = row.get("step_id", "")
-            if not sid:
-                continue
-            self._mapping_set_row(
+    def _mapping_build_group(self, step_id: str, step_name: str, candidates: list):
+        """후보 테이블을 가진 스텝 그룹 박스를 만들어 호스트에 추가한다."""
+        label = step_name or _FLOW_LABELS.get(step_id, step_id)
+        box = QGroupBox(f"{label}   ({step_id})")
+        box.setObjectName("mappingGroup")
+        v = QVBoxLayout(box)
+        v.setContentsMargins(12, 12, 12, 12)
+        v.setSpacing(6)
+
+        table = QTableWidget(0, 2)
+        table.setHorizontalHeaderLabels(["Type", "Selector Value (위 → 아래 순서로 시도)"])
+        hh = table.horizontalHeader()
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        table.setColumnWidth(0, 80)
+        table.verticalHeader().setVisible(False)
+        table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        table.verticalHeader().setDefaultSectionSize(40)
+        table.setWordWrap(True)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setMinimumHeight(120)
+        for cand in candidates:
+            self._mapping_set_cand(
                 table, table.rowCount(),
-                sid,
-                row.get("step_name", ""),
-                row.get("priority", ""),
-                row.get("selector_type", "xpath"),
-                row.get("selector_value", ""),
+                cand.get("selector_type", "xpath"),
+                cand.get("selector_value", ""),
             )
         table.resizeRowsToContents()
+        v.addWidget(table)
+
+        # 그룹별 후보 조작 버튼(해당 table 에 스코프).
+        row = QHBoxLayout()
+        b_add = QPushButton("후보 추가")
+        b_add.clicked.connect(lambda _=False, t=table: self._mapping_cand_add(t))
+        b_del = QPushButton("후보 삭제")
+        b_del.clicked.connect(lambda _=False, t=table: self._mapping_cand_del(t))
+        b_up = QPushButton("위로")
+        b_up.clicked.connect(lambda _=False, t=table: self._mapping_cand_move(t, -1))
+        b_dn = QPushButton("아래로")
+        b_dn.clicked.connect(lambda _=False, t=table: self._mapping_cand_move(t, 1))
+        for b in (b_add, b_del, b_up, b_dn):
+            row.addWidget(b)
+        row.addStretch()
+        v.addLayout(row)
+
+        self._mapping_host.addWidget(box)
+        self._mapping_groups.append(
+            {"step_id": step_id, "step_name": label, "table": table}
+        )
+
+    # ── Candidate row helpers ────────────────────────────────────────────────────
 
     @staticmethod
     def _mapping_make_type_combo(sel_type):
-        """Type 셀용 드롭다운(xpath/css/coord). 미지 값이면 항목 추가 후 선택."""
         combo = QComboBox()
-        combo.setEditable(False)
         combo.addItems(_MAP_TYPES)
         tv = str(sel_type or "xpath")
         idx = combo.findText(tv)
@@ -128,33 +150,24 @@ class MappingTabMixin:
         return combo
 
     @classmethod
-    def _mapping_set_type(cls, table, r, sel_type):
-        table.setCellWidget(r, 3, cls._mapping_make_type_combo(sel_type))
-
-    @classmethod
-    def _mapping_set_row(cls, table, r, step_id, step_name, priority, sel_type, value):
+    def _mapping_set_cand(cls, table, r, sel_type, value):
         if r >= table.rowCount():
             table.insertRow(r)
-        table.setItem(r, 0, QTableWidgetItem(str(step_id or "")))
-        table.setItem(r, 1, QTableWidgetItem(str(step_name or "")))
-        table.setItem(r, 2, QTableWidgetItem(str(priority)))
-        cls._mapping_set_type(table, r, sel_type)
-        table.setItem(r, 4, QTableWidgetItem(str(value or "")))
+        table.setCellWidget(r, 0, cls._mapping_make_type_combo(sel_type))
+        table.setItem(r, 1, QTableWidgetItem(str(value or "")))
 
-    def _mapping_add_row(self):
-        table = self._mapping_table
+    def _mapping_cand_add(self, table):
         r = table.rowCount()
-        self._mapping_set_row(table, r, "", "", 1, "xpath", "")
+        self._mapping_set_cand(table, r, "xpath", "")
         table.resizeRowToContents(r)
 
-    def _mapping_del_row(self):
-        table = self._mapping_table
+    @staticmethod
+    def _mapping_cand_del(table):
         rows = sorted({i.row() for i in table.selectedIndexes()}, reverse=True)
         for r in rows:
             table.removeRow(r)
 
-    def _mapping_move_row(self, delta: int):
-        table = self._mapping_table
+    def _mapping_cand_move(self, table, delta: int):
         rows = sorted({i.row() for i in table.selectedIndexes()})
         if not rows:
             return
@@ -162,55 +175,98 @@ class MappingTabMixin:
         target = r + delta
         if target < 0 or target >= table.rowCount():
             return
-        cols = table.columnCount()
 
-        def _cell_text(row, c):
-            if c == 3:  # Type 은 콤보 위젯
-                w = table.cellWidget(row, c)
-                return w.currentText() if w else "xpath"
-            it = table.item(row, c)
+        def _type(row):
+            w = table.cellWidget(row, 0)
+            return w.currentText() if w else "xpath"
+
+        def _val(row):
+            it = table.item(row, 1)
             return it.text() if it else ""
 
-        cur = [_cell_text(r, c) for c in range(cols)]
-        oth = [_cell_text(target, c) for c in range(cols)]
-        for c in range(cols):
-            if c == 3:  # Type 셀: 콤보 위젯을 재설정해 값 보존
-                self._mapping_set_type(table, r, oth[c])
-                self._mapping_set_type(table, target, cur[c])
-            else:
-                table.setItem(r, c, QTableWidgetItem(oth[c]))
-                table.setItem(target, c, QTableWidgetItem(cur[c]))
+        cur = (_type(r), _val(r))
+        oth = (_type(target), _val(target))
+        self._mapping_set_cand(table, r, oth[0], oth[1])
+        self._mapping_set_cand(table, target, cur[0], cur[1])
         table.selectRow(target)
 
+    # ── Populate / collect ───────────────────────────────────────────────────────
+
+    def _populate_mapping(self, selectors: list):
+        """스텝별 그룹을 다시 만들어 후보를 채운다.
+
+        ``selectors`` 는 storage.load_selectors() 형식(priority 정렬됨). step_id 별로
+        묶고, 표준 스텝(_FLOW_STEPS)은 후보가 없어도 항상 표시한다.
+        """
+        # 기존 그룹 제거.
+        self._mapping_groups = []
+        while self._mapping_host.count():
+            item = self._mapping_host.takeAt(0)
+            wdg = item.widget()
+            if wdg is not None:
+                wdg.setParent(None)
+                wdg.deleteLater()
+
+        grouped: dict[str, list] = {}
+        names: dict[str, str] = {}
+        for row in selectors:
+            sid = (row.get("step_id") or "").strip()
+            if not sid:
+                continue
+            grouped.setdefault(sid, []).append(row)
+            names.setdefault(sid, row.get("step_name", ""))
+
+        # 표준 스텝 먼저(없으면 빈 그룹), 그다음 사용자 정의 step_id.
+        ordered = [sid for sid, _ in _FLOW_STEPS]
+        ordered += [sid for sid in grouped if sid not in _FLOW_LABELS]
+
+        for sid in ordered:
+            self._mapping_build_group(
+                sid,
+                names.get(sid, _FLOW_LABELS.get(sid, "")),
+                grouped.get(sid, []),
+            )
+
+    def _mapping_add_step(self):
+        """빈 사용자 정의 step_id 그룹 하나 추가(이름은 비워두면 step_id 사용)."""
+        # 중복되지 않는 임시 step_id 생성.
+        existing = {g["step_id"] for g in self._mapping_groups}
+        base = "custom_step"
+        sid = base
+        n = 1
+        while sid in existing:
+            n += 1
+            sid = f"{base}{n}"
+        self._mapping_build_group(sid, "", [{"selector_type": "xpath", "selector_value": ""}])
+
     def _mapping_reset(self):
-        """Reload the built-in default selector chains into the table."""
         self._populate_mapping(storage.selector_defaults())
 
     def _collect_selectors(self) -> list[dict]:
-        """Flatten the free-form table back to the selectors.csv schema.
+        """그룹/행 순서를 priority(1..) 로 부여해 selectors.csv 스키마로 변환.
 
-        Each non-empty-step_id row becomes one selector dict (priority int,
-        step_id, step_name, selector_type, selector_value) — preserving the
-        existing save_selectors data contract. Empty step_id rows are dropped.
+        값이 빈 후보 행은 건너뛴다. step_id 가 빈 그룹도 건너뛴다.
         """
-        table = self._mapping_table
         rows: list[dict] = []
-        for r in range(table.rowCount()):
-            sid = (table.item(r, 0).text() if table.item(r, 0) else "").strip()
+        for g in self._mapping_groups:
+            sid = (g["step_id"] or "").strip()
             if not sid:
                 continue
-            raw_prio = (table.item(r, 2).text() if table.item(r, 2) else "").strip()
-            try:
-                prio = int(float(raw_prio))
-            except (ValueError, TypeError):
-                prio = 1
-            type_combo = table.cellWidget(r, 3)
-            sel_type = type_combo.currentText() if type_combo else "xpath"
-            rows.append({
-                "step_id":        sid,
-                "step_name":      (table.item(r, 1).text() if table.item(r, 1) else ""),
-                "priority":       prio,
-                "selector_type":  (sel_type or "xpath"),
-                "selector_value": (table.item(r, 4).text() if table.item(r, 4) else ""),
-            })
+            table = g["table"]
+            prio = 0
+            for r in range(table.rowCount()):
+                item = table.item(r, 1)
+                val = (item.text() if item else "").strip()
+                if not val:
+                    continue
+                combo = table.cellWidget(r, 0)
+                sel_type = combo.currentText() if combo else "xpath"
+                prio += 1
+                rows.append({
+                    "step_id":        sid,
+                    "step_name":      g["step_name"],
+                    "priority":       prio,
+                    "selector_type":  (sel_type or "xpath"),
+                    "selector_value": val,
+                })
         return rows

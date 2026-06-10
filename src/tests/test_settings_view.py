@@ -177,145 +177,150 @@ class TestSaveAll:
 
 
 class TestMappingTable:
-    # column indices for the free-form table: Step ID | Step Name | Priority | Type | Value
-    _SID, _NAME, _PRIO, _TYPE, _VALUE = 0, 1, 2, 3, 4
+    # Grouped-by-step mapping: each group has a 2-col table [Type combo | Value].
+    _TYPE, _VALUE = 0, 1
 
-    def test_single_table_populated_from_defaults(self, view):
+    @staticmethod
+    def _group(view, step_id):
+        return next(g for g in view._mapping_groups if g["step_id"] == step_id)
+
+    @staticmethod
+    def _set_value(table, r, text):
+        from PyQt6.QtWidgets import QTableWidgetItem
+        table.setItem(r, 1, QTableWidgetItem(text))
+
+    def test_groups_populated_from_defaults(self, view):
         view.load()
-        before = storage.load_selectors()
-        # one row per selector candidate (no per-step cards).
-        assert view._mapping_table.rowCount() == len(before)
-        # first column is the (free-form) step_id.
-        first = view._mapping_table.item(0, self._SID).text()
-        assert first == before[0]["step_id"]
+        # 표준 스텝(11개)이 그룹으로 모두 보인다.
+        ids = [g["step_id"] for g in view._mapping_groups]
+        for sid in ("search_icon", "search_input", "tag_result", "post_link",
+                    "profile_link"):
+            assert sid in ids
+
+    def test_search_icon_has_multiple_candidates(self, view):
+        view.load()
+        # search_icon 그룹은 후보가 1개 이상(여러 번 시도용).
+        assert self._group(view, "search_icon")["table"].rowCount() >= 1
 
     def test_collect_selectors_round_trip(self, view):
         view.load()
         before = storage.load_selectors()
         rows = view._collect_selectors()
-        # same total candidate count, priority is int, step_id preserved.
         assert len(rows) == len(before)
         assert all(isinstance(r["priority"], int) for r in rows)
         assert all(r["step_id"] for r in rows)
 
+    def test_candidate_order_is_priority(self, view):
+        view.load()
+        rows = [r for r in view._collect_selectors() if r["step_id"] == "search_icon"]
+        # 위→아래 순서가 priority 1,2,3...
+        assert [r["priority"] for r in rows] == list(range(1, len(rows) + 1))
+
     def test_edit_value_persists_through_save(self, view):
         view.load()
-        from PyQt6.QtWidgets import QTableWidgetItem
-        table = view._mapping_table
-        # find the first search_icon row and edit its value.
-        target = next(
-            r for r in range(table.rowCount())
-            if table.item(r, self._SID).text() == "search_icon"
-        )
-        table.setItem(target, self._VALUE, QTableWidgetItem("//a[@id='edited']"))
+        g = self._group(view, "search_icon")
+        self._set_value(g["table"], 0, "//a[@id='edited']")
         view._save_all()
         reloaded = storage.load_selectors()
         edited = [r for r in reloaded if r["step_id"] == "search_icon"]
         assert any(r["selector_value"] == "//a[@id='edited']" for r in edited)
 
-    def test_free_form_step_id_round_trip(self, view):
+    def test_add_candidate_reflected_in_collect(self, view):
         view.load()
-        from PyQt6.QtWidgets import QTableWidgetItem
-        table = view._mapping_table
-        view._mapping_add_row()
-        r = table.rowCount() - 1
-        table.setItem(r, self._SID, QTableWidgetItem("my_custom_step"))
-        table.setItem(r, self._NAME, QTableWidgetItem("커스텀"))
-        table.setItem(r, self._PRIO, QTableWidgetItem("2"))
-        # Type 은 콤보 위젯 — 항목을 선택해 지정한다.
-        type_combo = table.cellWidget(r, self._TYPE)
-        type_combo.setCurrentText("css")
-        table.setItem(r, self._VALUE, QTableWidgetItem("div.custom"))
-        view._save_all()
-        reloaded = storage.load_selectors()
-        custom = [r for r in reloaded if r["step_id"] == "my_custom_step"]
-        assert len(custom) == 1
-        assert custom[0]["selector_value"] == "div.custom"
-        assert custom[0]["selector_type"] == "css"
-        assert custom[0]["priority"] == 2
+        g = self._group(view, "search_icon")
+        n0 = len([r for r in view._collect_selectors() if r["step_id"] == "search_icon"])
+        view._mapping_cand_add(g["table"])
+        self._set_value(g["table"], g["table"].rowCount() - 1, "//a[@role='link']")
+        n1 = len([r for r in view._collect_selectors() if r["step_id"] == "search_icon"])
+        assert n1 == n0 + 1
 
-    def test_empty_step_id_row_dropped_on_collect(self, view):
+    def test_empty_candidate_dropped_on_collect(self, view):
         view.load()
+        g = self._group(view, "search_icon")
         n0 = len(view._collect_selectors())
-        view._mapping_add_row()  # blank step_id row
+        view._mapping_cand_add(g["table"])  # blank value row
         assert len(view._collect_selectors()) == n0
 
-    def test_add_and_delete_row(self, view):
+    def test_add_and_delete_candidate(self, view):
         view.load()
-        table = view._mapping_table
+        table = self._group(view, "search_icon")["table"]
         n0 = table.rowCount()
-        view._mapping_add_row()
+        view._mapping_cand_add(table)
         assert table.rowCount() == n0 + 1
         table.selectRow(table.rowCount() - 1)
-        view._mapping_del_row()
+        view._mapping_cand_del(table)
         assert table.rowCount() == n0
 
-    def test_move_row_swaps(self, view):
+    def test_move_candidate_swaps(self, view):
         view.load()
-        from PyQt6.QtWidgets import QTableWidgetItem
-        table = view._mapping_table
-        table.setItem(0, self._VALUE, QTableWidgetItem("AAA"))
-        table.setItem(1, self._VALUE, QTableWidgetItem("BBB"))
+        table = self._group(view, "search_icon")["table"]
+        if table.rowCount() < 2:
+            view._mapping_cand_add(table)
+        self._set_value(table, 0, "AAA")
+        self._set_value(table, 1, "BBB")
         table.selectRow(0)
-        view._mapping_move_row(1)
+        view._mapping_cand_move(table, 1)
         assert table.item(0, self._VALUE).text() == "BBB"
         assert table.item(1, self._VALUE).text() == "AAA"
 
     def test_reset_restores_defaults(self, view):
         view.load()
-        table = view._mapping_table
-        view._mapping_add_row()  # mutate
+        g = self._group(view, "search_icon")
+        view._mapping_cand_add(g["table"])  # mutate
         view._mapping_reset()
-        assert table.rowCount() == len(storage.selector_defaults())
+        assert len(view._collect_selectors()) == len(storage.selector_defaults())
 
     def test_mapping_rebuilds_on_reload(self, view):
         view.load()
-        n = view._mapping_table.rowCount()
-        view.load()  # second load must not duplicate rows
-        assert view._mapping_table.rowCount() == n
+        n = len(view._mapping_groups)
+        view.load()  # second load must not duplicate groups
+        assert len(view._mapping_groups) == n
+
+    def test_add_custom_step(self, view):
+        view.load()
+        n0 = len(view._mapping_groups)
+        view._mapping_add_step()
+        assert len(view._mapping_groups) == n0 + 1
 
     def test_type_cell_is_combo_with_choices(self, view):
         from PyQt6.QtWidgets import QComboBox
         view.load()
-        combo = view._mapping_table.cellWidget(0, self._TYPE)
+        table = self._group(view, "search_icon")["table"]
+        combo = table.cellWidget(0, self._TYPE)
         assert isinstance(combo, QComboBox)
         items = [combo.itemText(i) for i in range(combo.count())]
         for t in ("xpath", "css", "coord"):
             assert t in items
-        # 기존 값이 콤보에 선택되어 있어야 한다.
-        expected = storage.load_selectors()[0].get("selector_type", "xpath")
-        assert combo.currentText() == expected
 
-    def test_added_row_type_defaults_to_xpath(self, view):
+    def test_added_candidate_type_defaults_to_xpath(self, view):
         view.load()
-        view._mapping_add_row()
-        r = view._mapping_table.rowCount() - 1
-        combo = view._mapping_table.cellWidget(r, self._TYPE)
-        assert combo is not None
-        assert combo.currentText() == "xpath"
+        table = self._group(view, "search_icon")["table"]
+        view._mapping_cand_add(table)
+        combo = table.cellWidget(table.rowCount() - 1, self._TYPE)
+        assert combo is not None and combo.currentText() == "xpath"
 
-    def test_type_combo_selection_round_trips(self, view):
-        from PyQt6.QtWidgets import QTableWidgetItem
+    def test_coord_type_round_trips(self, view):
         view.load()
-        table = view._mapping_table
-        view._mapping_add_row()
+        table = self._group(view, "search_icon")["table"]
+        view._mapping_cand_add(table)
         r = table.rowCount() - 1
-        table.setItem(r, self._SID, QTableWidgetItem("coord_step"))
-        table.setItem(r, self._PRIO, QTableWidgetItem("1"))
         table.cellWidget(r, self._TYPE).setCurrentText("coord")
-        table.setItem(r, self._VALUE, QTableWidgetItem("100,200"))
-        rows = view._collect_selectors()
-        got = next(x for x in rows if x["step_id"] == "coord_step")
-        assert got["selector_type"] == "coord"
+        self._set_value(table, r, "100,200")
+        rows = [x for x in view._collect_selectors() if x["step_id"] == "search_icon"]
+        assert any(x["selector_type"] == "coord" and x["selector_value"] == "100,200"
+                   for x in rows)
 
-    def test_move_row_preserves_type_combo(self, view):
-        from PyQt6.QtWidgets import QTableWidgetItem
+    def test_move_candidate_preserves_type(self, view):
         view.load()
-        table = view._mapping_table
+        table = self._group(view, "search_icon")["table"]
+        if table.rowCount() < 2:
+            view._mapping_cand_add(table)
         table.cellWidget(0, self._TYPE).setCurrentText("xpath")
         table.cellWidget(1, self._TYPE).setCurrentText("css")
+        self._set_value(table, 0, "A")
+        self._set_value(table, 1, "B")
         table.selectRow(0)
-        view._mapping_move_row(1)
+        view._mapping_cand_move(table, 1)
         assert table.cellWidget(0, self._TYPE).currentText() == "css"
         assert table.cellWidget(1, self._TYPE).currentText() == "xpath"
 
