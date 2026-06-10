@@ -76,6 +76,11 @@ class TestTray:
         window._restore_from_tray()
         assert window.isMinimized() is False
 
+    def test_quit_on_last_window_closed_disabled(self, window, qapp):
+        # 보조 창(호버 상세/메시지박스/파일 다이얼로그)이 닫혀도 앱이 자동 종료되지
+        # 않도록 — 종료는 메인 창 closeEvent 의 명시 quit() 로만.
+        assert qapp.quitOnLastWindowClosed() is False
+
     def test_close_quits_even_with_tray(self, window):
         # 닫기(X)는 트레이 유무와 관계없이 완전 종료 (event.accept).
         window._tray = MagicMock()

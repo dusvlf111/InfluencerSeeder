@@ -27,6 +27,13 @@ class MainWindow(QMainWindow):
         if icon and not icon.isNull():
             self.setWindowIcon(icon)
 
+        # 보조 창(호버 상세 다이얼로그·QMessageBox·파일 다이얼로그 등)이 닫힐 때
+        # Qt 가 '마지막 창이 닫혔다'고 보고 앱을 자동 종료하는 것을 막는다.
+        # 종료는 오직 메인 창 X / 트레이 '종료' → closeEvent → quit() 로만 일어난다.
+        app = QApplication.instance()
+        if app is not None:
+            app.setQuitOnLastWindowClosed(False)
+
         self._scraper = None  # EmbeddedScraper (or None)
         self._scrape_had_error = False
         self._run_logger: RunLogger | None = None
