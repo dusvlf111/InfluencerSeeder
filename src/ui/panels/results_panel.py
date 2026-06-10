@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtCore import Qt, QUrl, QTimer, pyqtSignal
+from PyQt6.QtGui import QCursor, QDesktopServices
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame,
     QLabel, QPushButton, QProgressBar, QTextEdit,
@@ -95,6 +95,17 @@ class ResultsPanel(QWidget):
         self._table.setColumnWidth(4, 64)
         self._table.setColumnWidth(6, 56)
         self._table.cellDoubleClicked.connect(self._on_cell_double_clicked)
+        self._table.setMouseTracking(True)
+        self._table.viewport().setMouseTracking(True)
+        self._table.cellEntered.connect(self._on_cell_hovered)
+
+        self._hover_timer = QTimer(self)
+        self._hover_timer.setSingleShot(True)
+        self._hover_timer.setInterval(400)
+        self._hover_timer.timeout.connect(self._show_detail_dialog)
+        self._hover_row = -1
+        self._detail_dialog = None
+
         layout.addWidget(self._table)
         return tab
 
@@ -289,6 +300,28 @@ class ResultsPanel(QWidget):
         self._login_banner.setVisible(False)
 
     # ── Cell interactions ─────────────────────────────────────────────────────
+
+    def _on_cell_hovered(self, row: int, col: int):
+        if row == self._hover_row:
+            return
+        self._hover_row = row
+        self._hover_timer.stop()
+        if self._detail_dialog is not None:
+            self._detail_dialog.close()
+            self._detail_dialog = None
+        self._hover_timer.start()
+
+    def _show_detail_dialog(self):
+        row = self._hover_row
+        if row < 0 or row >= len(self._results):
+            return
+        from ui.dialogs.profile_detail_dialog import ProfileDetailDialog
+        info = self._results[row]
+        dlg = ProfileDetailDialog(info, self)
+        pos = QCursor.pos()
+        dlg.move(pos.x() + 16, pos.y() + 8)
+        dlg.show()
+        self._detail_dialog = dlg
 
     def _on_cell_double_clicked(self, row: int, col: int):
         # 유저네임(1) → 프로필, 링크(6) → 웹사이트/게시물. 그 외엔 무시.

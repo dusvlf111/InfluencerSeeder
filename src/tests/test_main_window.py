@@ -146,6 +146,54 @@ class TestResume:
         MockScraper.assert_not_called()
 
 
+# ── 타겟·제외 계정 양방향 동기화 (컨트롤 패널 ↔ 설정) ────────────────────────
+
+class TestSyncControlPanelAndSettings:
+    def test_show_settings_pushes_control_target(self, window):
+        # 컨트롤 패널에서 검색 조건을 바꾸고 설정을 열면 target.csv 에 반영된다.
+        window._control._btn_keyword.setChecked(True)
+        window._control._search_input.setText("취준생")
+        window._control._follower_filter.set_values(5000, 50000)
+        window.show_settings()
+        t = storage.load_target()
+        assert t["mode"] == "keyword"
+        assert t["keyword"] == "취준생"
+        assert int(t["min_followers"]) == 5000
+        assert int(t["max_followers"]) == 50000
+
+    def test_show_settings_preserves_target_only_fields(self, window):
+        # 컨트롤 패널에 없는 타겟 전용 필드(min_posts 등)는 보존된다.
+        storage.save_target({**storage.load_target(), "min_posts": 12,
+                             "min_following": 7})
+        window._control._search_input.setText("인턴")
+        window.show_settings()
+        t = storage.load_target()
+        assert int(t["min_posts"]) == 12
+        assert int(t["min_following"]) == 7
+        assert t["keyword"] == "인턴"
+
+    def test_show_main_applies_target_to_control(self, window):
+        # 설정에서 저장된 target.csv 가 메인 복귀 시 컨트롤 패널에 반영된다.
+        storage.save_target({**storage.load_target(), "mode": "keyword",
+                             "keyword": "마케팅", "min_followers": 10000,
+                             "max_followers": 100000})
+        window.show_main()
+        assert window._control._btn_keyword.isChecked() is True
+        assert window._control._search_input.text() == "마케팅"
+        assert window._control._follower_filter.min_followers == 10000
+        assert window._control._follower_filter.max_followers == 100000
+
+    def test_show_main_refreshes_excluded(self, window):
+        # 설정에서 추가/삭제된 제외 계정이 메인 복귀 시 위젯에 그대로 반영(치환).
+        storage.save_excluded(["spammer", "bot"])
+        window.show_main()
+        assert set(window._control.excluded_widget.accounts) == {"spammer", "bot"}
+        # 삭제도 반영(병합이 아니라 치환)
+        storage.save_excluded(["bot"])
+        window.show_main()
+        assert set(window._control.excluded_widget.accounts) == {"bot"}
+
+
 # ── 4.4 Blocked + Skip ───────────────────────────────────────────────────────
 
 class TestBlockedAndSkip:

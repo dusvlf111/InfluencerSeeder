@@ -1,4 +1,4 @@
-"""SettingsView (Push3) — 기본 설정 탭 populate/collect/save_all 검증.
+"""SettingsView — 남은 탭(딜레이/수집 설정/제외 계정/버튼매핑) populate/collect/save_all 검증.
 
 pytest-qt 미설치: tests/conftest.py 의 offscreen `qapp` session fixture 를 사용해
 위젯을 직접 생성하고 순수 로직(populate/collect/save_all)만 검증한다.
@@ -33,42 +33,18 @@ class TestTabsAndPopulate:
 
     def test_tabs_present(self, view):
         labels = [view._tabs.tabText(i) for i in range(view._tabs.count())]
-        for name in ("Web", "Delays", "Flow", "Target", "Excluded"):
+        for name in ("타겟", "딜레이", "수집 설정", "제외 계정", "버튼매핑"):
             assert name in labels
 
-    def test_mapping_and_flow_tabs_present(self, view):
-        # P3/P4: "Selectors" 탭은 "버튼매핑" 카드 탭으로 교체되고 "플로우" 탭이 추가됨.
+    def test_removed_tabs_absent(self, view):
         labels = [view._tabs.tabText(i) for i in range(view._tabs.count())]
-        assert "버튼매핑" in labels
-        assert "플로우" in labels
-        assert "Selectors" not in labels
+        for name in ("Web", "수집 항목", "플로우", "Dependencies"):
+            assert name not in labels, f"제거된 탭 '{name}' 이 여전히 표시됨"
 
-    def test_web_widgets_exist_and_defaults(self, view):
+    def test_flow_widgets_present(self, view):
         view.load()
-        # headless default false → unchecked
-        assert view._w_headless.isChecked() is False
-        assert view._w_randomize_window.isChecked() is True
-        assert view._w_browser.currentText() == "chrome"
-        assert view._w_window_width.value() == 1280
-        assert view._w_window_height.value() == 900
-        assert view._w_locale.text() == "ko-KR"
-        assert view._w_implicit_wait.value() == 5
-        assert view._w_page_load_timeout.value() == 30
-
-    def test_flow_widgets_defaults(self, view):
-        view.load()
-        assert view._fl_max_tags.value() == 3
-        assert view._fl_tag_start_index.value() == 0
         assert view._fl_posts_per_tag.value() == 5
-        assert view._fl_scroll_max_attempts.value() == 15
-        assert view._fl_skip_visited_profile.isChecked() is True
-        assert view._fl_stop_on_consecutive_miss.value() == 10
-
-    def test_target_widgets_defaults(self, view):
-        view.load()
-        assert view._t_min_followers.value() == 0
-        assert view._t_max_followers.value() == 0
-        assert view._t_mode.currentText() == "hashtag"
+        assert view._fl_skip_first.isChecked() is True
 
     def test_delays_table_has_scroll_and_typing_rows(self, view):
         view.load()
@@ -81,44 +57,21 @@ class TestTabsAndPopulate:
 
     def test_delays_populated_from_defaults(self, view):
         view.load()
-        # step1 default (1.0, 2.5)
-        assert float(view._delay_table.item(0, 1).text()) == 1.0
-        assert float(view._delay_table.item(0, 2).text()) == 2.5
+        defaults = storage.delay_defaults()
+        lo, hi = defaults["step1"]
+        assert float(view._delay_table.item(0, 1).text()) == lo
+        assert float(view._delay_table.item(0, 2).text()) == hi
 
 
 class TestSaveAll:
-    def test_round_trip_web(self, view, tmp_path):
-        view.load()
-        view._w_headless.setChecked(True)
-        view._w_window_width.setValue(1024)
-        view._w_locale.setText("en-US")
-        view._save_all()
-        web = storage.load_web()
-        assert _as_bool(web["headless"]) is True
-        assert int(web["window_width"]) == 1024
-        assert web["locale"] == "en-US"
-
     def test_round_trip_flow(self, view):
         view.load()
-        view._fl_max_tags.setValue(7)
-        view._fl_skip_visited_profile.setChecked(False)
+        view._fl_posts_per_tag.setValue(12)
+        view._fl_skip_first.setChecked(False)
         view._save_all()
         flow = storage.load_flow()
-        assert int(flow["max_tags"]) == 7
-        assert _as_bool(flow["skip_visited_profile"]) is False
-
-    def test_round_trip_target(self, view):
-        view.load()
-        view._t_min_followers.setValue(5000)
-        view._t_max_followers.setValue(50000)
-        view._t_keyword.setText("seoul")
-        view._t_mode.setCurrentText("keyword")
-        view._save_all()
-        target = storage.load_target()
-        assert int(target["min_followers"]) == 5000
-        assert int(target["max_followers"]) == 50000
-        assert target["keyword"] == "seoul"
-        assert target["mode"] == "keyword"
+        assert int(flow["posts_per_tag"]) == 12
+        assert _as_bool(flow["skip_first_post"]) is False
 
     def test_round_trip_delays(self, view):
         view.load()
@@ -160,24 +113,38 @@ class TestSaveAll:
         view._save_all()
         assert fired == [True]
 
-    def test_save_all_creates_all_csvs(self, view, tmp_path):
+    def test_round_trip_target(self, view):
+        view.load()
+        view._t_min_followers.setValue(5000)
+        view._t_max_followers.setValue(50000)
+        view._t_keyword.setText("취준생")
+        idx = view._t_mode.findText("keyword")
+        view._t_mode.setCurrentIndex(idx)
+        view._save_all()
+        target = storage.load_target()
+        assert int(target["min_followers"]) == 5000
+        assert int(target["max_followers"]) == 50000
+        assert target["keyword"] == "취준생"
+        assert target["mode"] == "keyword"
+
+    def test_save_all_creates_active_csvs(self, view, tmp_path):
         view.load()
         view._save_all()
-        for name in ("web.csv", "delays.csv", "flow.csv", "target.csv", "excluded.csv"):
-            assert (tmp_path / name).exists()
+        for name in ("delays.csv", "flow.csv", "target.csv", "excluded.csv", "selectors.csv"):
+            assert (tmp_path / name).exists(), f"{name} not created"
 
-    def test_save_all_writes_flow_steps_csv(self, view, tmp_path):
+    def test_save_all_does_not_write_removed_csvs(self, view, tmp_path):
         view.load()
         view._save_all()
-        assert (tmp_path / "flow_steps.csv").exists()
-        assert (tmp_path / "selectors.csv").exists()
+        # 제거된 탭의 CSV 는 _save_all 이 건드리지 않음
+        for name in ("web.csv", "fields.csv", "flow_steps.csv"):
+            assert not (tmp_path / name).exists(), f"{name} should not be written"
 
 
-# ── A: 버튼매핑 자유 편집 단일 테이블 ──────────────────────────────────────────
+# ── 버튼매핑 자유 편집 단일 테이블 ──────────────────────────────────────────
 
 
 class TestMappingTable:
-    # Grouped-by-step mapping: each group has a 2-col table [Type combo | Value].
     _TYPE, _VALUE = 0, 1
 
     @staticmethod
@@ -191,15 +158,12 @@ class TestMappingTable:
 
     def test_groups_populated_from_defaults(self, view):
         view.load()
-        # 표준 스텝(11개)이 그룹으로 모두 보인다.
         ids = [g["step_id"] for g in view._mapping_groups]
-        for sid in ("search_icon", "search_input", "tag_result", "post_link",
-                    "profile_link"):
+        for sid in ("search_icon", "search_input", "tag_result", "post_link", "profile_link"):
             assert sid in ids
 
     def test_search_icon_has_multiple_candidates(self, view):
         view.load()
-        # search_icon 그룹은 후보가 1개 이상(여러 번 시도용).
         assert self._group(view, "search_icon")["table"].rowCount() >= 1
 
     def test_collect_selectors_round_trip(self, view):
@@ -213,7 +177,6 @@ class TestMappingTable:
     def test_candidate_order_is_priority(self, view):
         view.load()
         rows = [r for r in view._collect_selectors() if r["step_id"] == "search_icon"]
-        # 위→아래 순서가 priority 1,2,3...
         assert [r["priority"] for r in rows] == list(range(1, len(rows) + 1))
 
     def test_edit_value_persists_through_save(self, view):
@@ -325,131 +288,7 @@ class TestMappingTable:
         assert table.cellWidget(1, self._TYPE).currentText() == "xpath"
 
 
-# ── Fix-2 B: 수집 항목 탭 ───────────────────────────────────────────────────────
-
-
-class TestFieldsTab:
-    def test_tab_present(self, view):
-        labels = [view._tabs.tabText(i) for i in range(view._tabs.count())]
-        assert "수집 항목" in labels
-
-    def test_username_always_collected_and_disabled(self, view):
-        view.load()
-        assert view._cf_username.isChecked() is True
-        assert view._cf_username.isEnabled() is False
-
-    def test_checkboxes_default_checked(self, view):
-        view.load()
-        for field in storage.COLLECT_FIELDS:
-            assert getattr(view, f"_cf_{field}").isChecked() is True
-
-    def test_collect_fields_settings_shape(self, view):
-        view.load()
-        d = view._collect_fields_settings()
-        assert set(d.keys()) == set(storage.COLLECT_FIELDS)
-        assert all(isinstance(v, bool) for v in d.values())
-
-    def test_round_trip_through_save(self, view):
-        view.load()
-        view._cf_followers.setChecked(False)
-        view._cf_bio.setChecked(False)
-        view._save_all()
-        f = storage.load_fields()
-        assert f["followers"] is False
-        assert f["bio"] is False
-        assert f["full_name"] is True
-
-    def test_populate_reflects_saved(self, view):
-        storage.save_fields({"website": False})
-        view.load()
-        assert view._cf_website.isChecked() is False
-        assert view._cf_followers.isChecked() is True
-
-
-# ── P4: 플로우 빌더 ────────────────────────────────────────────────────────────
-
-
-class TestFlowBuilder:
-    def test_flow_table_populated_from_defaults(self, view):
-        view.load()
-        assert view._flow_table.rowCount() == len(storage.flow_steps_defaults())
-
-    def test_collect_flow_steps_shape(self, view):
-        view.load()
-        rows = view._collect_flow_steps()
-        assert rows
-        first = rows[0]
-        for key in ("order", "phase", "step_name", "action", "selector_ref", "param", "enabled"):
-            assert key in first
-        assert all(isinstance(r["enabled"], bool) for r in rows)
-        assert all(isinstance(r["order"], int) for r in rows)
-
-    def test_collect_matches_defaults_actions(self, view):
-        view.load()
-        rows = view._collect_flow_steps()
-        actions = [r["action"] for r in rows]
-        assert actions == [r["action"] for r in storage.flow_steps_defaults()]
-
-    def test_add_row_increments(self, view):
-        view.load()
-        n0 = view._flow_table.rowCount()
-        view._flow_add_row()
-        assert view._flow_table.rowCount() == n0 + 1
-        # order renumbered consecutively
-        last = view._flow_table.item(view._flow_table.rowCount() - 1, 0).text()
-        assert last == str(view._flow_table.rowCount())
-
-    def test_delete_row(self, view):
-        view.load()
-        n0 = view._flow_table.rowCount()
-        view._flow_table.selectRow(0)
-        view._flow_del_row()
-        assert view._flow_table.rowCount() == n0 - 1
-
-    def test_move_row_reorders_actions(self, view):
-        view.load()
-        before = [r["action"] for r in view._collect_flow_steps()]
-        view._flow_table.selectRow(0)
-        view._flow_move_row(1)
-        after = [r["action"] for r in view._collect_flow_steps()]
-        assert after[0] == before[1]
-        assert after[1] == before[0]
-
-    def test_reset_to_defaults(self, view):
-        view.load()
-        view._flow_add_row()
-        view._flow_reset()
-        assert view._flow_table.rowCount() == len(storage.flow_steps_defaults())
-
-    def test_round_trip_flow_steps_through_save(self, view):
-        view.load()
-        # add a wait step, then save and reload
-        view._flow_add_row()
-        view._save_all()
-        reloaded = storage.load_flow_steps()
-        # defaults(10) + 1 added
-        assert len(reloaded) == len(storage.flow_steps_defaults()) + 1
-        assert reloaded[-1]["action"] in storage.FLOW_ACTIONS
-
-    def test_disabled_step_persists(self, view):
-        from PyQt6.QtWidgets import QCheckBox
-        view.load()
-        wrap = view._flow_table.cellWidget(0, 6)
-        chk = wrap.findChild(QCheckBox)
-        chk.setChecked(False)
-        view._save_all()
-        reloaded = storage.load_flow_steps()
-        assert reloaded[0]["enabled"] is False
-
-    def test_selector_ref_choices_are_distinct_step_ids(self, view):
-        view.load()
-        choices = view._selector_ref_choices()
-        assert "search_icon" in choices
-        assert "post_link" in choices
-        assert len(choices) == len(set(choices))
-
-
-# ── P5: 설정 폴더 가져오기/내보내기 (storage 헬퍼 경로 주입) ──────────────────────
+# ── 설정 폴더 가져오기/내보내기 ──────────────────────────────────────────────
 
 
 class TestConfigShare:
@@ -458,17 +297,8 @@ class TestConfigShare:
         view._save_all()
         share = tmp_path / "share"
         written = storage.export_config_to_dir(str(share))
-        assert "flow_steps.csv" in written
         assert "selectors.csv" in written
-        # mutate flow then re-import from the exported folder
-        view._flow_reset()
-        view._flow_add_row()
-        view._save_all()
-        imported = storage.import_config_from_dir(str(share))
-        assert "flow_steps.csv" in imported
-        # reload reflects the imported (original) flow length
-        view.load()
-        assert view._flow_table.rowCount() == len(storage.flow_steps_defaults())
+        assert "delays.csv" in written
 
     def test_import_empty_folder_returns_nothing(self, view, tmp_path):
         empty = tmp_path / "empty"
@@ -482,35 +312,30 @@ class TestConfigShare:
         zip_path = tmp_path / "config.zip"
         written = storage.export_config_to_zip(str(zip_path))
         assert zip_path.exists()
-        assert "flow_steps.csv" in written
         assert "selectors.csv" in written
-        # mutate flow then re-import from the exported zip
-        view._flow_reset()
-        view._flow_add_row()
+        # mutate selectors, re-import to restore
+        g = next(g for g in view._mapping_groups if g["step_id"] == "search_icon")
+        view._mapping_cand_add(g["table"])
         view._save_all()
         imported = storage.import_config_from_zip(str(zip_path))
-        assert "flow_steps.csv" in imported
-        view.load()
-        assert view._flow_table.rowCount() == len(storage.flow_steps_defaults())
+        assert "selectors.csv" in imported
 
     def test_import_missing_zip_returns_nothing(self, tmp_path):
         assert storage.import_config_from_zip(str(tmp_path / "nope.zip")) == []
 
 
-# ── Fix-2 D: zip 전용 + 항목 선택 공유 (설정 + 제외 + 수집데이터) ─────────────────
+# ── zip 전용 + 항목 선택 공유 (설정 + 제외 + 수집데이터) ──────────────────────
 
 
 class TestShareableZip:
-    def test_results_and_fields_round_trip(self, view, tmp_path):
+    def test_results_and_excluded_round_trip(self, view, tmp_path):
         view.load()
         view._save_all()
-        # collected data + a couple of excluded accounts
         storage.append_result({"username": "alice", "followers": "100"})
         storage.save_excluded(["spammer"])
         zip_path = tmp_path / "bundle.zip"
         written = storage.export_config_to_zip(str(zip_path))
         assert "results.csv" in written
-        assert "fields.csv" in written
         assert "excluded.csv" in written
         # wipe + re-import → data restored.
         (tmp_path / "results.csv").unlink()
@@ -526,8 +351,8 @@ class TestShareableZip:
         storage.append_result({"username": "bob", "followers": "5"})
         zip_path = tmp_path / "sel.zip"
         written = storage.export_config_to_zip(
-            str(zip_path), names=["selectors.csv", "fields.csv"])
-        assert set(written) == {"selectors.csv", "fields.csv"}
+            str(zip_path), names=["selectors.csv", "delays.csv"])
+        assert set(written) == {"selectors.csv", "delays.csv"}
         assert "results.csv" not in written
 
     def test_results_excluded_when_absent(self, view, tmp_path):
@@ -540,9 +365,7 @@ class TestShareableZip:
 
     def test_shareable_files_includes_data_and_config(self):
         assert "results.csv" in storage.SHAREABLE_FILES
-        assert "fields.csv" in storage.SHAREABLE_FILES
         assert "excluded.csv" in storage.SHAREABLE_FILES
-        # no duplicates
         assert len(storage.SHAREABLE_FILES) == len(set(storage.SHAREABLE_FILES))
 
 
@@ -553,9 +376,7 @@ class TestExportSelectDialog:
         view._save_all()  # materializes config CSVs (no results.csv)
         dlg = ExportSelectDialog()
         names = dlg.selected_names()
-        # config files exist and are pre-checked; results.csv absent → unchecked.
         assert "selectors.csv" in names
-        assert "fields.csv" in names
         assert "results.csv" not in names
         dlg.close()
 
@@ -567,7 +388,6 @@ class TestExportSelectDialog:
         dlg._set_all(False)
         assert dlg.selected_names() == []
         dlg._set_all(True)
-        # only existing files become checked
         assert "selectors.csv" in dlg.selected_names()
         dlg.close()
 

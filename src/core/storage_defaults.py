@@ -276,7 +276,7 @@ _SELECTOR_DEFAULTS: list[dict] = [
 _RESULTS_FIELDNAMES = [
     "username", "full_name", "followers", "following", "posts_count",
     "bio", "website", "is_private", "profile_url",
-    "source_tag", "source_post_url", "collected_at",
+    "source_tag", "source_post_url", "screenshot_path", "collected_at",
 ]
 
 _SELECTOR_FIELDNAMES = ["step_id", "step_name", "priority", "selector_type", "selector_value"]

@@ -74,6 +74,14 @@ class ExcludedAccountsWidget(QGroupBox):
         self._accounts = merged
         self._save()
 
+    def refresh_from_storage(self):
+        """excluded.csv 를 다시 읽어 목록을 그대로 교체(설정 화면 편집 반영).
+
+        ``reload`` 과 달리 병합이 아니라 치환이라, 설정에서 삭제한 계정도 사라진다.
+        파일을 다시 쓰지 않고 표시만 갱신한다(이미 저장된 상태를 읽으므로)."""
+        self._accounts = storage.load_excluded()
+        self._refresh()
+
     @property
     def accounts(self) -> list[str]:
         return list(self._accounts)

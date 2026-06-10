@@ -1,6 +1,7 @@
 """Delays 탭 (시간텀, §2.3) Mixin — _build_delays_tab / _populate_delays / _collect_delays."""
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
 )
@@ -47,6 +48,7 @@ class DelaysTabMixin:
         self._delay_table.horizontalHeader().setSectionResizeMode(
             2, QHeaderView.ResizeMode.ResizeToContents
         )
+        self._delay_table.setFont(QFont("", 11))
         self._delay_table.verticalHeader().setVisible(False)
         # 입력 칸이 잘리지 않도록 행 높이를 넉넉히.
         self._delay_table.verticalHeader().setDefaultSectionSize(40)

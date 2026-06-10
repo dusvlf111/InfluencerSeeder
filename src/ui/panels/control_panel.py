@@ -116,11 +116,39 @@ class ControlPanel(QWidget):
         layout.addStretch()
 
     def _apply_saved_settings(self):
-        s = storage.load_settings()
+        # 검색 조건(모드/검색어/팔로워 범위)의 단일 출처는 target.csv —
+        # 설정 화면의 '타겟' 탭과 양방향으로 공유된다.
+        self.apply_target(storage.load_target())
+
+    def apply_target(self, target: dict):
+        """target.csv(dict) 값을 검색 모드/검색어/팔로워 범위 위젯에 반영."""
+        mode = str(target.get("mode", "hashtag") or "hashtag")
+        if mode == "keyword":
+            self._btn_keyword.setChecked(True)
+        else:
+            self._btn_hashtag.setChecked(True)
+        self._on_mode_change()
+        self._search_input.setText(str(target.get("keyword", "") or ""))
         self._follower_filter.set_values(
-            s.get("min_followers", 0),
-            s.get("max_followers", 0),
+            int(target.get("min_followers", 0) or 0),
+            int(target.get("max_followers", 0) or 0),
         )
+
+    def current_target(self) -> dict:
+        """현재 컨트롤 패널 검색 조건을 target.csv 부분 dict 로 반환(양방향 동기화).
+
+        타겟 전용 필드(팔로잉 범위/최소 게시물)는 설정 탭에서만 편집하므로 포함하지
+        않는다 — 호출부가 기존 target.csv 와 병합한다."""
+        return {
+            "mode": "hashtag" if self._btn_hashtag.isChecked() else "keyword",
+            "keyword": self._search_input.text().strip(),
+            "min_followers": self._follower_filter.min_followers,
+            "max_followers": self._follower_filter.max_followers,
+        }
+
+    def reload_excluded(self):
+        """제외 계정 목록을 excluded.csv 에서 다시 읽어 표시 갱신(설정 편집 반영)."""
+        self.excluded_widget.refresh_from_storage()
 
     def _on_mode_change(self):
         if self._btn_hashtag.isChecked():

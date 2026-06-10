@@ -425,6 +425,11 @@ class EmbeddedScraper(QObject):
         from core import storage
         self._selectors = selectors if selectors is not None else storage.load_selectors()
         self._flow = flow if flow is not None else storage.load_flow()
+        # 타겟 전용 필터(target.csv §2.5) — 팔로잉 범위 / 최소 게시물. 0 = 무제한.
+        _t = target if target is not None else storage.load_target()
+        self.min_following = int((_t or {}).get("min_following", 0) or 0)
+        self.max_following = int((_t or {}).get("max_following", 0) or 0)
+        self.min_posts = int((_t or {}).get("min_posts", 0) or 0)
         self._delays = storage.load_delays()
         self._skip_first = str(self._flow.get("skip_first_post", "true")).lower() == "true"
         self.posts_per_tag = int(self._flow.get("posts_per_tag", 5) or 5)
@@ -793,6 +798,22 @@ class EmbeddedScraper(QObject):
             self._log(f"  [wait/profile] 프로필 로딩 대기... ({self._WAIT_TRIES - left + 1}/{self._WAIT_TRIES})")
             self._sleep(self._WAIT_MS, lambda: self._wait_profile(left - 1, cb))
 
+    def _capture_screenshot(self, username: str) -> str:
+        """현재 브라우저 화면을 PNG로 캡처해 data/screenshots/{username}.png 저장 후 경로 반환."""
+        from pathlib import Path
+        from core import storage
+        shots_dir = storage.DATA_DIR / "screenshots"
+        shots_dir.mkdir(parents=True, exist_ok=True)
+        path = shots_dir / f"{username}.png"
+        try:
+            pixmap = self._browser.grab()
+            if not pixmap.isNull():
+                pixmap.save(str(path), "PNG")
+                return str(path)
+        except Exception as exc:
+            self._log(f"  [screenshot] 캡처 실패: {exc}")
+        return ""
+
     def _save_info(self, info, after_cb):
         """프로필 dedup/필터/저장 처리 후 after_cb() 로 다음 단계 진행.
 
@@ -817,6 +838,10 @@ class EmbeddedScraper(QObject):
                 self._seen.add(norm)
                 return after_cb()
         self._seen.add(norm)
+        # 프로필 페이지 캡처 (아직 이탈 전)
+        shot_path = self._capture_screenshot(username)
+        if shot_path:
+            info["screenshot_path"] = shot_path
         info["source_tag"] = self._cur_keyword
         info["collected_at"] = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
         try:

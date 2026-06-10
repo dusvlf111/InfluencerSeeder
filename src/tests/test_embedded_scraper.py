@@ -49,6 +49,17 @@ class TestJsBuilders:
         js = build_profile_js(sels)
         assert "followers" in js and "__findFirst" in js and "location.href" in js
 
+    def test_profile_js_has_bio_fallback(self):
+        # 설정 셀렉터가 빈 값이면 헤더에서 내용 기반으로 bio 를 보충한다.
+        js = build_profile_js([])
+        assert "__headerBio" in js
+        assert "if (!out.bio) out.bio = __headerBio();" in js
+
+    def test_txt_chain_skips_empty_candidates(self):
+        # __txt 가 빈 매칭에서 멈추지 않고 다음 후보를 시도하도록 루프로 생성된다.
+        js = build_profile_js([])
+        assert "for (var i = 0; i < cands.length; i++)" in js
+
 
 class TestCleanNum:
     def test_extracts_first_number(self):

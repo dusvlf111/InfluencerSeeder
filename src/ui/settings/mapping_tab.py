@@ -8,6 +8,7 @@
 ``_collect_selectors()`` 가 그룹/행 순서를 priority(1..) 로 부여한 list[dict] 를 반환.
 """
 
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
@@ -98,6 +99,7 @@ class MappingTabMixin:
         v.setSpacing(6)
 
         table = QTableWidget(0, 2)
+        table.setFont(QFont("", 11))
         table.setHorizontalHeaderLabels(["Type", "Selector Value (위 → 아래 순서로 시도)"])
         hh = table.horizontalHeader()
         hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
@@ -143,6 +145,7 @@ class MappingTabMixin:
     @staticmethod
     def _mapping_make_type_combo(sel_type):
         combo = QComboBox()
+        combo.setFont(QFont("", 11))
         combo.addItems(_MAP_TYPES)
         tv = str(sel_type or "xpath")
         idx = combo.findText(tv)
