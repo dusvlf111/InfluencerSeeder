@@ -24,10 +24,24 @@ _HOME_URL = "https://www.instagram.com/"
 _IPHONE_W = 390
 _IPHONE_H = 844
 _EMBED_SCALE = 0.75
-# 세로 스크롤바가 콘텐츠를 밀어 가로 스크롤이 생기지 않도록 폭에 약간 여유를 둔다.
-_SCROLLBAR_PAD = 18  # CSS px
-_EMBED_W = round((_IPHONE_W + _SCROLLBAR_PAD) * _EMBED_SCALE)  # ~306
-_EMBED_H = round(_IPHONE_H * _EMBED_SCALE)                     # 633
+# 모바일 임베딩이라 스크롤바는 CSS 로 숨긴다(아래 _HIDE_SCROLLBAR_JS) → 별도
+# 여유 폭이 필요 없어 정확히 iPhone 12 의 75% 크기로 둔다.
+_EMBED_W = round(_IPHONE_W * _EMBED_SCALE)   # 293
+_EMBED_H = round(_IPHONE_H * _EMBED_SCALE)   # 633
+
+# 임베디드 모바일 뷰의 스크롤바 제거(스크롤 자체는 가능, 막대만 비표시).
+_HIDE_SCROLLBAR_JS = """
+(function() {
+    var id = '__embed_no_scrollbar__';
+    if (document.getElementById(id)) return;
+    var s = document.createElement('style');
+    s.id = id;
+    s.textContent =
+        '*::-webkit-scrollbar{width:0!important;height:0!important;display:none!important;}' +
+        'html,body{scrollbar-width:none!important;-ms-overflow-style:none!important;}';
+    (document.head || document.documentElement).appendChild(s);
+})();
+"""
 
 
 class BrowserPanel(QWebEngineView):
@@ -70,8 +84,12 @@ class BrowserPanel(QWebEngineView):
         self.load(QUrl(_HOME_URL))
 
     def _reapply_zoom(self, *_):
-        """페이지 이동 후 줌이 리셋되므로 75% 를 다시 적용."""
+        """페이지 이동 후 줌이 리셋되므로 75% 를 다시 적용하고 스크롤바를 숨긴다."""
         self.setZoomFactor(_EMBED_SCALE)
+        try:
+            self.page().runJavaScript(_HIDE_SCROLLBAR_JS)
+        except Exception:
+            pass
 
     def _on_cookie_added(self, cookie):
         name = bytes(cookie.name()).decode("utf-8", errors="replace")
