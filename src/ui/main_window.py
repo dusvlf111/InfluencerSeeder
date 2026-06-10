@@ -1,7 +1,7 @@
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
-    QMainWindow, QSplitter, QStackedWidget,
+    QMainWindow, QSplitter, QStackedWidget, QWidget, QVBoxLayout,
     QSystemTrayIcon, QMenu, QMessageBox, QApplication, QLabel,
 )
 
@@ -23,9 +23,7 @@ class MainWindow(QMainWindow):
     def __init__(self, icon: QIcon | None = None):
         super().__init__()
         self.setWindowTitle("인플루언서 시딩기")
-        # iPhone 12 Pro 논리 해상도(390 x 844)로 고정 — 모바일 UA 임베디드
-        # 브라우저와 동일 비율. 리사이즈 불가, 내부 컨텐츠는 스크롤로 처리.
-        self.setFixedSize(390, 844)
+        self.setMinimumSize(1200, 700)
         if icon and not icon.isNull():
             self.setWindowIcon(icon)
 
@@ -55,9 +53,16 @@ class MainWindow(QMainWindow):
         outer.addWidget(self._control)
 
         # 중간: 임베디드 브라우저 (WebEngine 사용 가능 시)
+        # 뷰는 iPhone 크기(390x844)로 고정 — 남는 공간 안에서 가운데 정렬한다.
         if _HAS_WEBENGINE:
             self._browser = BrowserPanel()
-            outer.addWidget(self._browser)
+            browser_wrap = QWidget()
+            wrap_l = QVBoxLayout(browser_wrap)
+            wrap_l.setContentsMargins(0, 0, 0, 0)
+            wrap_l.addStretch()
+            wrap_l.addWidget(self._browser, alignment=Qt.AlignmentFlag.AlignHCenter)
+            wrap_l.addStretch()
+            outer.addWidget(browser_wrap)
         else:
             placeholder = QLabel(
                 "임베디드 브라우저 미지원\n\n"
