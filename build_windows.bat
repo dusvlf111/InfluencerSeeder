@@ -65,6 +65,27 @@ echo       Installed: !PYTHON_VERSION!
 
 :PYTHON_OK
 
+:: Require Python 3.10+ — PEP 604 union 문법(dict ^| None 등)은 3.10+ 에서만 런타임
+:: 평가된다. 3.9 이하면 빌드는 되지만 실행 시 TypeError 로 죽으므로 여기서 막는다.
+!PYTHON_CMD! -c "import sys; sys.exit(0 if sys.version_info[:2] >= (3,10) else 1)" > nul 2>&1
+if errorlevel 1 (
+    echo       Detected Python older than 3.10 - looking for 3.12/3.11/3.10 via py launcher...
+    set PYTHON_CMD=
+    for %%V in (3.12 3.11 3.10) do (
+        if not defined PYTHON_CMD (
+            py -%%V --version > nul 2>&1
+            if not errorlevel 1 set PYTHON_CMD=py -%%V
+        )
+    )
+    if not defined PYTHON_CMD (
+        echo [ERROR] Python 3.10+ is required ^(found older version^).
+        echo         Install Python 3.12 from https://www.python.org/downloads/ and re-run.
+        goto :fail
+    )
+    for /f "tokens=*" %%v in ('!PYTHON_CMD! --version 2^>^&1') do set PYTHON_VERSION=%%v
+    echo       Using: !PYTHON_VERSION!  ^(!PYTHON_CMD!^)
+)
+
 :: 수집은 임베디드 QtWebEngine(Chromium 내장) 브라우저에서 진행 — 시스템 Chrome 불필요.
 
 :: -------------------------------------------------------
@@ -72,6 +93,14 @@ echo       Installed: !PYTHON_VERSION!
 :: -------------------------------------------------------
 echo.
 echo [2/5] Setting up virtual environment...
+:: 기존 venv 가 3.10 미만으로 만들어졌다면(과거 빌드 잔존) 폐기하고 다시 만든다.
+if exist ".venv_win\Scripts\python.exe" (
+    .venv_win\Scripts\python.exe -c "import sys; sys.exit(0 if sys.version_info[:2] >= (3,10) else 1)" > nul 2>&1
+    if errorlevel 1 (
+        echo       Existing .venv_win is older than 3.10 - recreating.
+        rmdir /s /q .venv_win
+    )
+)
 if exist ".venv_win\Scripts\python.exe" (
     echo       .venv_win already exists, skipping.
 ) else (

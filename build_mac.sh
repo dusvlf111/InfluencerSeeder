@@ -53,15 +53,28 @@ echo "============================================================"
 echo ""
 
 # ----- Step 1: Check Python 3 -----
-echo "[1/5] Checking Python 3..."
+echo "[1/5] Checking Python (3.10+ required)..."
+
+# PEP 604 union 문법(예: dict | None)은 Python 3.10+ 에서만 런타임 평가된다.
+# 시스템 기본 python3 가 3.9 이하면 빌드는 되지만 실행 시 다음으로 죽는다:
+#   TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+# 따라서 3.10+ 인터프리터를 우선 선택하고, 없으면 Homebrew 로 3.12 를 설치한다.
+_py_ge_310() {
+    "$1" -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3, 10) else 1)' \
+        >/dev/null 2>&1
+}
 
 PYTHON_CMD=""
+for _cand in python3.12 python3.11 python3.10 python3; do
+    if command -v "$_cand" &>/dev/null && _py_ge_310 "$_cand"; then
+        PYTHON_CMD="$_cand"
+        echo "      Found: $($_cand --version 2>&1)  ($_cand)"
+        break
+    fi
+done
 
-if command -v python3 &>/dev/null; then
-    PYTHON_CMD="python3"
-    echo "      Found: $(python3 --version 2>&1)"
-else
-    echo "      Python 3 not found. Installing via Homebrew..."
+if [ -z "$PYTHON_CMD" ]; then
+    echo "      No Python 3.10+ found. Installing Python 3.12 via Homebrew..."
 
     if ! command -v brew &>/dev/null; then
         echo "      Homebrew not found. Installing Homebrew..."
@@ -91,13 +104,18 @@ else
 
     export PATH="$(brew --prefix python@3.12)/bin:$PATH"
 
-    if ! command -v python3 &>/dev/null; then
-        echo "[ERROR] python3 not found after install."
+    for _cand in python3.12 python3; do
+        if command -v "$_cand" &>/dev/null && _py_ge_310 "$_cand"; then
+            PYTHON_CMD="$_cand"
+            break
+        fi
+    done
+    if [ -z "$PYTHON_CMD" ]; then
+        echo "[ERROR] Python 3.10+ not found after install."
         echo "        Please restart your terminal and re-run this script."
         exit 1
     fi
-    PYTHON_CMD="python3"
-    echo "      Installed: $(python3 --version 2>&1)"
+    echo "      Installed: $($PYTHON_CMD --version 2>&1)  ($PYTHON_CMD)"
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -111,6 +129,11 @@ echo ""
 echo "[2/5] Setting up virtual environment..."
 
 VENV_DIR=".venv_mac"
+# 기존 venv 가 3.10 미만으로 만들어졌다면(과거 빌드 잔존) 폐기하고 다시 만든다.
+if [ -f "$VENV_DIR/bin/python" ] && ! _py_ge_310 "$VENV_DIR/bin/python"; then
+    echo "      Existing $VENV_DIR is < 3.10 — recreating with $PYTHON_CMD."
+    rm -rf "$VENV_DIR"
+fi
 if [ -f "$VENV_DIR/bin/python" ]; then
     echo "      $VENV_DIR already exists, skipping."
 else

@@ -1,6 +1,18 @@
 import sys
 import os
 
+# Python 3.10+ 필수 — 코드 곳곳에서 PEP 604 union(예: dict | None)을 쓴다.
+# 3.9 이하로 실행하면 import 도중 "unsupported operand type(s) for |" 로 죽으므로,
+# 프로젝트 모듈을 import 하기 전에 여기서 먼저 막고 명확히 안내한다.
+if sys.version_info < (3, 10):
+    _v = ".".join(map(str, sys.version_info[:3]))
+    sys.stderr.write(
+        f"[InfluencerSeeder] Python 3.10 이상이 필요합니다 (현재 {_v}).\n"
+        "  빌드 스크립트(build_mac.sh / build_windows.bat)를 다시 실행하면\n"
+        "  3.10+ 인터프리터로 재빌드됩니다.\n"
+    )
+    sys.exit(1)
+
 # QtWebEngine(Chromium)이 창 최소화/백그라운드 시 렌더러·타이머를 throttle 하지
 # 않도록 — 백그라운드 수집 중에도 JS 클릭/딜레이가 정상 속도로 동작하게 한다.
 # (WebEngine 초기화 전에 설정해야 적용됨)
