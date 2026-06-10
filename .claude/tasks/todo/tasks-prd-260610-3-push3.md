@@ -98,13 +98,13 @@
         - [x] 3.1.T1 pytest (`tests/test_settings_view.py`, `class TestTabsAndPopulate`): qapp+tmp DATA_DIR 로 `SettingsView()` 생성·`load()` 호출 시 예외 없음, 웹/시간텀/플로우/타겟/제외 탭 위젯 존재, web/flow/target 위젯이 storage 기본값으로 채워짐(예: headless 체크 해제, max_tags=3, mode=hashtag).
         - [x] 3.1.T2 `cd src && .venv/bin/pytest tests/test_settings_view.py::TestTabsAndPopulate -v` 실행 및 검증
 
-    - [ ] 3.2 _save_all 통합 + collect (web/delays/flow/target/excluded)
+    - [x] 3.2 _save_all 통합 + collect (web/delays/flow/target/excluded)
         **작업 상세:** `_save_all()` 이 `storage.save_web/save_delays/save_flow/save_target/save_excluded` 를 호출하도록 통합(+ 기존 `save_selectors`/`save_settings` 호출은 그대로 유지). 각 `_collect_web/_collect_delays/_collect_flow/_collect_target/_collect_excluded` 구현. `_collect_delays` 는 `{step_id:(min,max)}` dict 로 반환. 저장 실패 시 `QMessageBox.critical`(기존 패턴). 성공 시 `back_requested.emit()`.
         ⚠️ 셀렉터 collect/save 는 기존 코드 그대로(flow-builder 영역).
         **참조:** `src/ui/settings_view.py` (`_save_all`, `_collect_*`)
-        - [ ] 3.2.T1 pytest (`class TestSaveAll`): 위젯값 세팅 후 `_save_all` 호출 → tmp DATA_DIR 에 web/delays/flow/target/excluded CSV 생성·값 round-trip(`storage.load_*` 로 재확인), 잘못된 숫자 입력 시 예외 전파 없이 처리.
-        - [ ] 3.2.T2 `cd src && .venv/bin/pytest tests/test_settings_view.py::TestSaveAll -v` 실행 및 검증
+        - [x] 3.2.T1 pytest (`class TestSaveAll`): 위젯값 세팅 후 `_save_all` 호출 → tmp DATA_DIR 에 web/delays/flow/target/excluded CSV 생성·값 round-trip(`storage.load_*` 로 재확인), 잘못된 숫자 입력 시 예외 전파 없이 처리.
+        - [x] 3.2.T2 `cd src && .venv/bin/pytest tests/test_settings_view.py::TestSaveAll -v` 실행 및 검증
 
-    - [ ] 3.3 전체 회귀 + 스모크
+    - [x] 3.3 전체 회귀 + 스모크
         **작업 상세:** `cd src && .venv/bin/pytest tests/ -v` 전체 통과(기존 185 + 신규 settings 테스트). 헤드리스면 `SettingsView` 생성·`load()`·`_save_all()` 스모크로 대체하고 사유 기록.
-        - [ ] 3.3.T1 `cd src && .venv/bin/pytest tests/ -v` 전체 통과 확인
+        - [x] 3.3.T1 `cd src && .venv/bin/pytest tests/ -v` 전체 통과 확인 (212 passed = 기존 185 + 신규 27)
