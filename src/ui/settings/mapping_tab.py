@@ -59,10 +59,10 @@ class MappingTabMixin:
         header.setMinimumSectionSize(55)
         table.setMinimumWidth(600)
         table.verticalHeader().setVisible(False)
-        # 콤보/편집 셀이 세로로 잘리지 않도록 행 높이를 키운다.
-        table.verticalHeader().setDefaultSectionSize(36)
-        # 세로로 더 길게 — 좁은(390px) 창에서도 한 번에 많은 행이 보이도록.
-        # 컨텐츠가 넘치면 아래 QScrollArea 가 스크롤을 제공한다.
+        # 긴 셀렉터 값이 잘리지 않도록: 행 높이를 컨텐츠에 맞게 자동 조절
+        table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        table.verticalHeader().setDefaultSectionSize(44)
+        table.setWordWrap(True)
         table.setMinimumHeight(560)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._mapping_table = table
@@ -111,6 +111,7 @@ class MappingTabMixin:
                 row.get("selector_type", "xpath"),
                 row.get("selector_value", ""),
             )
+        table.resizeRowsToContents()
 
     @staticmethod
     def _mapping_make_type_combo(sel_type):
@@ -144,6 +145,7 @@ class MappingTabMixin:
         table = self._mapping_table
         r = table.rowCount()
         self._mapping_set_row(table, r, "", "", 1, "xpath", "")
+        table.resizeRowToContents(r)
 
     def _mapping_del_row(self):
         table = self._mapping_table
