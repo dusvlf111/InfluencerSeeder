@@ -2,7 +2,7 @@
 
 > PRD: `.claude/tasks/prd-260610-3.md` (§4 트레이, §7 Resume, §8 로깅/진행표시, §9 `ui/main_window.py`)
 > Push 범위: `ui/main_window.py` 시스템 트레이 최소화 + [이어하기] + 차단 모달, `core/logging` 영속 로그 파일, 진행표시 라벨, 신규 신호 배선
-> 상태: 🔲 진행 중
+> 상태: ✅ 완료
 > 선행: **Push 1·2 완료 필수** (storage `load_state/clear_state`, scraper `skip_signal/blocked_signal`, 생성자 web/delays/flow/target 주입). Push 3 과도 신호 연계(`imported`, `selector_test_requested`).
 
 ---
@@ -72,39 +72,39 @@
 
 ## 작업
 
-- [ ] 4.0 메인윈도우/로깅/진행표시 (Push 범위)
+- [x] 4.0 메인윈도우/로깅/진행표시 (Push 범위)
 
-    - [ ] 4.1 영속 로그 파일 — `core/run_logger.py`
+    - [x] 4.1 영속 로그 파일 — `core/run_logger.py`
         **작업 상세:** §8. `RunLogger` 클래스: `__init__` 시 `DATA_DIR/logs` 생성, `run-YYYYMMDD-HHMMSS.log` 파일 오픈. `write(level, step_id, message)` → `[ISO8601] [LEVEL] [step_id] message\n` 기록 + flush. `close()`. 타임스탬프는 `datetime.now()` 사용(테스트는 형식만 검증). 경로는 `storage.DATA_DIR` 동적 참조(모듈 캐시 금지).
         MainWindow 가 스크랩 시작 시 `RunLogger` 생성, `log_signal`/`step_signal`/`skip_signal`/`blocked_signal` 수신 시 파일에도 기록, `done_signal` 시 `close()`.
         **참조:** PRD §8
-        - [ ] 4.1.T1 pytest (`tests/test_run_logger.py`, `class TestRunLogger`): tmp DATA_DIR 로 생성 시 logs 디렉토리·파일 생성, `write` 후 파일에 `[LEVEL] [step_id]` 형식 라인 포함, 여러 write 누적, close 후 읽기 가능.
-        - [ ] 4.1.T2 `cd src && .venv/bin/pytest tests/test_run_logger.py -v` 실행 및 검증
+        - [x] 4.1.T1 pytest (`tests/test_run_logger.py`, `class TestRunLogger`): tmp DATA_DIR 로 생성 시 logs 디렉토리·파일 생성, `write` 후 파일에 `[LEVEL] [step_id]` 형식 라인 포함, 여러 write 누적, close 후 읽기 가능.
+        - [x] 4.1.T2 `cd src && .venv/bin/pytest tests/test_run_logger.py -v` 실행 및 검증
 
-    - [ ] 4.2 QSystemTrayIcon + 트레이 최소화
+    - [x] 4.2 QSystemTrayIcon + 트레이 최소화
         **작업 상세:** §4. MainWindow 에 `_setup_tray()`: 트레이 사용 가능 시 아이콘+컨텍스트 메뉴(표시/종료) 생성. `changeEvent`/최소화 시 `hide()` + 트레이 잔류, 트레이 활성화 시 `showNormal()`. 진행 상태를 `setToolTip`/`showMessage`(알림)로 표시. 미지원 환경 안전 처리.
         **참조:** PRD §4, `src/ui/main_window.py` (`closeEvent`)
-        - [ ] 4.2.T1 pytest (`tests/test_main_window.py`, `class TestTray`): qapp 로 MainWindow 생성 시 예외 없음, `_setup_tray` 호출 후 트레이 미지원 환경에서도 안전(속성 None 허용), `isSystemTrayAvailable` False 시 tray 비활성 분기.
-        - [ ] 4.2.T2 `cd src && .venv/bin/pytest tests/test_main_window.py::TestTray -v` 실행 및 검증
+        - [x] 4.2.T1 pytest (`tests/test_main_window.py`, `class TestTray`): qapp 로 MainWindow 생성 시 예외 없음, `_setup_tray` 호출 후 트레이 미지원 환경에서도 안전(속성 None 허용), `isSystemTrayAvailable` False 시 tray 비활성 분기.
+        - [x] 4.2.T2 `cd src && .venv/bin/pytest tests/test_main_window.py::TestTray -v` 실행 및 검증
 
-    - [ ] 4.3 [이어하기] 버튼 + resume 배선
+    - [x] 4.3 [이어하기] 버튼 + resume 배선
         **작업 상세:** §7. `control_panel.py` 에 **[이어하기]** 버튼(+`resume_requested = pyqtSignal()`). MainWindow 가 시작 시 `storage.load_state()` 존재하면 버튼 활성. 클릭 시 `resume_state` 를 ScraperThread 생성자에 주입해 `_start_scrape(resume=True)`. 신규 스크랩 시작 시 `clear_state()` 후 시작(이어하기 아니면 깨끗이). `_start_scrape` params 구성에 `web/selectors/delays/flow/target/excluded_set` 주입(Push2 생성자 시그니처에 맞춤).
         **참조:** PRD §7, §9, `src/ui/main_window.py` (`_start_scrape`), `src/ui/panels/control_panel.py`
-        - [ ] 4.3.T1 pytest (`class TestResume`): tmp DATA_DIR 에 state.json 있을 때 MainWindow 가 이어하기 활성 판단(`storage.load_state() is not None` 로직), 없을 때 비활성. `_start_scrape` 가 resume 플래그에 따라 resume_state 주입 dict 구성(ScraperThread 는 patch/Mock 으로 생성 가로채 인자 검증).
-        - [ ] 4.3.T2 `cd src && .venv/bin/pytest tests/test_main_window.py::TestResume -v` 실행 및 검증
+        - [x] 4.3.T1 pytest (`class TestResume`): tmp DATA_DIR 에 state.json 있을 때 MainWindow 가 이어하기 활성 판단(`storage.load_state() is not None` 로직), 없을 때 비활성. `_start_scrape` 가 resume 플래그에 따라 resume_state 주입 dict 구성(ScraperThread 는 patch/Mock 으로 생성 가로채 인자 검증).
+        - [x] 4.3.T2 `cd src && .venv/bin/pytest tests/test_main_window.py::TestResume -v` 실행 및 검증
 
-    - [ ] 4.4 차단 감지 모달 + skip 신호 배선
+    - [x] 4.4 차단 감지 모달 + skip 신호 배선
         **작업 상세:** §5. `blocked_signal` → `_on_blocked()`: `QMessageBox` 경고(차단 감지·일시정지 안내) + 스크래퍼 일시정지/중단(`self._scraper.stop()` 또는 pause 플래그). `skip_signal` → `_on_skip(username)`: 중복 skip 카운터 증가 + 로그/진행 라벨 갱신.
         **참조:** PRD §5, §6, `src/ui/main_window.py` (`_on_error` 패턴)
-        - [ ] 4.4.T1 pytest (`class TestBlockedAndSkip`): `_on_skip` 연속 호출 시 카운터 누적, `_on_blocked` 가 스크래퍼 stop 호출(MagicMock scraper)·예외 없음(QMessageBox 는 patch 또는 modal 회피).
-        - [ ] 4.4.T2 `cd src && .venv/bin/pytest tests/test_main_window.py::TestBlockedAndSkip -v` 실행 및 검증
+        - [x] 4.4.T1 pytest (`class TestBlockedAndSkip`): `_on_skip` 연속 호출 시 카운터 누적, `_on_blocked` 가 스크래퍼 stop 호출(MagicMock scraper)·예외 없음(QMessageBox 는 patch 또는 modal 회피).
+        - [x] 4.4.T2 `cd src && .venv/bin/pytest tests/test_main_window.py::TestBlockedAndSkip -v` 실행 및 검증
 
-    - [ ] 4.5 진행표시 라벨 + 로그 색상
+    - [x] 4.5 진행표시 라벨 + 로그 색상
         **작업 상세:** §8. `results_panel.py` 에 진행 라벨: `태그 t/max_tags · 게시물 p/posts_per_tag · 수집 N · 중복skip M`. `step_signal`/`progress_signal`/`skip_signal` 로 실시간 갱신. 로그 탭은 레벨별 색상(step=`Colors.accent`, info=`Colors.muted2`, warning=`Colors.amber`, error=`Colors.red`) — `append_log` 가 메시지 prefix(`[step]`/`[ERROR]`/`[blocked]`/`[skip]` 등) 보고 색 결정.
         **참조:** PRD §8, `src/ui/panels/results_panel.py`, `src/design/tokens.py`
-        - [ ] 4.5.T1 pytest (`class TestProgressLabel`): qapp 로 ResultsPanel 생성, 진행 갱신 메서드 호출 시 라벨 텍스트에 수집/skip 수 반영, 색상 결정 헬퍼가 prefix별 올바른 `Colors.*` 반환(순수 함수로 분리해 테스트).
-        - [ ] 4.5.T2 `cd src && .venv/bin/pytest tests/test_main_window.py::TestProgressLabel -v` 실행 및 검증
+        - [x] 4.5.T1 pytest (`class TestProgressLabel`): qapp 로 ResultsPanel 생성, 진행 갱신 메서드 호출 시 라벨 텍스트에 수집/skip 수 반영, 색상 결정 헬퍼가 prefix별 올바른 `Colors.*` 반환(순수 함수로 분리해 테스트).
+        - [x] 4.5.T2 `cd src && .venv/bin/pytest tests/test_main_window.py::TestProgressLabel -v` 실행 및 검증
 
-    - [ ] 4.6 전체 통합 회귀 + 수동 스모크
+    - [x] 4.6 전체 통합 회귀 + 수동 스모크
         **작업 상세:** `cd src && .venv/bin/pytest tests/ -v` 전체 통과. 가능하면 `.venv/bin/python main.py` 로 앱 기동, 트레이 최소화·[이어하기] 비활성/활성·로그 색상 육안 확인(헤드리스면 생략·사유 기록). Push1~4 통합 동작 확인.
-        - [ ] 4.6.T1 `cd src && .venv/bin/pytest tests/ -v` 전체 통과 확인
+        - [x] 4.6.T1 `cd src && .venv/bin/pytest tests/ -v` 전체 통과 확인
