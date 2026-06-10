@@ -5,7 +5,9 @@ QWebEngineView + 영속 프로파일로 로그인 세션 보존.
 쿠키는 cookieAdded 신호로 수집 -> Selenium 쿠키 주입에 사용.
 """
 from PyQt6.QtCore import QUrl
-from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage
+from PyQt6.QtWebEngineCore import (
+    QWebEngineProfile, QWebEnginePage, QWebEngineSettings,
+)
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 
 import core.storage as storage
@@ -75,6 +77,11 @@ class BrowserPanel(QWebEngineView):
         page = QWebEnginePage(self._profile, self)
         self.setPage(page)
 
+        # 미디어 설정 — 인스타 영상/릴스는 자동재생이라 'PlaybackRequiresUserGesture'
+        # 가 켜져 있으면 재생되지 않는다(영상 오류). 자동재생을 허용하고 관련
+        # 기능을 켠다.
+        self._configure_media(page.settings())
+
         # ⚠️ zoomFactor 는 setPage 로 페이지가 교체되면 1.0 으로 리셋되고, 페이지
         # 이동(load)마다도 초기화된다. 따라서 setPage 이후에 적용하고, 매 로드
         # 완료마다 재적용해야 75% 축소가 유지된다(안 그러면 100%로 보여 "확대"됨).
@@ -82,6 +89,27 @@ class BrowserPanel(QWebEngineView):
         self.loadFinished.connect(self._reapply_zoom)
 
         self.load(QUrl(_HOME_URL))
+
+    @staticmethod
+    def _configure_media(settings):
+        """영상 자동재생 허용 등 미디어 관련 WebEngine 설정.
+
+        QWebEngineSettings 속성은 Qt 버전에 따라 일부가 없을 수 있으므로 각각
+        존재할 때만 적용한다(예외 전파 금지)."""
+        A = QWebEngineSettings.WebAttribute
+        for name, value in (
+            ("PlaybackRequiresUserGesture", False),  # 자동재생 허용(핵심)
+            ("PluginsEnabled", True),
+            ("WebGLEnabled", True),
+            ("Accelerated2dCanvasEnabled", True),
+            ("FullScreenSupportEnabled", True),
+        ):
+            attr = getattr(A, name, None)
+            if attr is not None:
+                try:
+                    settings.setAttribute(attr, value)
+                except Exception:
+                    pass
 
     def _reapply_zoom(self, *_):
         """페이지 이동 후 줌이 리셋되므로 75% 를 다시 적용하고 스크롤바를 숨긴다."""
