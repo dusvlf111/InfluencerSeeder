@@ -72,7 +72,7 @@
 
 ## 작업
 
-- [ ] 2.0 ScraperThread stealth/resume/flow (Push 범위)
+- [x] 2.0 ScraperThread stealth/resume/flow (Push 범위)
 
     - [x] 2.1 `_resolve_selector(step_id)` — priority 폴백 체인
         **작업 상세:** §9. 생성자에서 `storage.load_selectors()`(priority 정렬됨)를 `step_id -> [row,...]` 리스트로 그룹화해 보관(`self._selector_chains`).
@@ -123,6 +123,6 @@
         - [x] 2.6.T1 pytest (`class TestBlockedDetection`): MagicMock driver.current_url 가 challenge/login URL 일 때 `_is_blocked` True, 정상 프로필 URL 일 때 False.
         - [x] 2.6.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestBlockedDetection -v` 실행 및 검증
 
-    - [ ] 2.7 전체 회귀 검증
+    - [x] 2.7 전체 회귀 검증
         **작업 상세:** `cd src && .venv/bin/pytest tests/ -v`. 기존 `TestParseFollowers`/`TestScraperThreadIsValidUsername`/`TestScraperThreadPassesFollowerFilter` 가 깨지지 않는지 확인(기존 메서드 시그니처 유지). 깨졌으면 호환되도록 수정.
-        - [ ] 2.7.T1 `cd src && .venv/bin/pytest tests/ -v` 전체 통과 확인
+        - [x] 2.7.T1 `cd src && .venv/bin/pytest tests/ -v` 전체 통과 확인 (124 passed)
