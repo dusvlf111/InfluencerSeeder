@@ -10,7 +10,7 @@ Selector Value). 임의의 step_id 를 추가해 flow_steps 의 selector_ref 와
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QComboBox,
+    QComboBox, QScrollArea,
 )
 
 import core.storage as storage
@@ -61,6 +61,9 @@ class MappingTabMixin:
         table.verticalHeader().setVisible(False)
         # 콤보/편집 셀이 세로로 잘리지 않도록 행 높이를 키운다.
         table.verticalHeader().setDefaultSectionSize(36)
+        # 세로로 더 길게 — 좁은(390px) 창에서도 한 번에 많은 행이 보이도록.
+        # 컨텐츠가 넘치면 아래 QScrollArea 가 스크롤을 제공한다.
+        table.setMinimumHeight(560)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._mapping_table = table
         outer.addWidget(table)
@@ -82,7 +85,11 @@ class MappingTabMixin:
         btn_row.addStretch()
         outer.addLayout(btn_row)
 
-        return w
+        # 고정 390x844 창에서 테이블/버튼이 잘리지 않도록 전체를 스크롤 영역에 둔다.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(w)
+        return scroll
 
     def _populate_mapping(self, selectors: list):
         """Fill the free-form table from a (priority-sorted) selector list.

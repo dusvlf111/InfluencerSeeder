@@ -1,5 +1,7 @@
 import sys
 import os
+from pathlib import Path
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
 try:
@@ -13,42 +15,67 @@ from ui.main_window import MainWindow
 
 _SERVER_NAME = "InfluencerSeederSingleInstance"
 
+# 앱 아이콘 — src/assets/icon.ico (Windows) 또는 icon.png 사용
+_ASSETS = Path(__file__).resolve().parent / "assets"
+_ICON_ICO = _ASSETS / "icon.ico"
+_ICON_PNG = _ASSETS / "icon.png"
+
+
+def _app_icon() -> QIcon:
+    for p in (_ICON_ICO, _ICON_PNG):
+        if p.exists():
+            return QIcon(str(p))
+    return QIcon()
+
 
 def _try_raise_existing() -> bool:
-    """기존 인스턴스에 'show' 메시지를 보내고 True 반환. 없으면 False."""
+    """기존 인스턴스에 'show' 메시지를 보내고 True 반환.
+    stale pipe 오탐 방지: 서버로부터 'ok' 응답을 확인해야 True."""
     if not _HAS_QTNETWORK:
         return False
     sock = QLocalSocket()
     sock.connectToServer(_SERVER_NAME)
-    if sock.waitForConnected(500):
-        sock.write(b"show")
-        sock.flush()
-        sock.waitForBytesWritten(500)
-        sock.disconnectFromServer()
-        return True
-    return False
+    if not sock.waitForConnected(300):
+        return False
+    sock.write(b"show")
+    sock.flush()
+    sock.waitForBytesWritten(300)
+    # 살아있는 서버라면 'ok' 응답이 온다 — stale pipe는 응답 없음
+    alive = sock.waitForReadyRead(300)
+    sock.abort()
+    return alive
 
 
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("인플루언서 시딩기")
+    icon = _app_icon()
+    if not icon.isNull():
+        app.setWindowIcon(icon)
 
     # 기존 인스턴스가 있으면 복원 신호만 보내고 종료
     if _try_raise_existing():
         os._exit(0)
 
     app.setStyleSheet(build_stylesheet())
-    window = MainWindow()
+    window = MainWindow(icon=icon)
 
     # 단일 인스턴스 서버 시작
+    _server = None
     if _HAS_QTNETWORK:
-        server = QLocalServer(app)
+        _server = QLocalServer(app)
         QLocalServer.removeServer(_SERVER_NAME)  # 이전 크래시 잔여 소켓 제거
-        server.listen(_SERVER_NAME)
-        server.newConnection.connect(lambda: _handle_new_connection(server, window))
+        _server.listen(_SERVER_NAME)
+        _server.newConnection.connect(lambda: _handle_new_connection(_server, window))
 
     window.show()
     app.exec()
+
+    # 서버 명시 정리 → Windows named pipe stale 방지
+    if _server is not None:
+        _server.close()
+        QLocalServer.removeServer(_SERVER_NAME)
+
     # os._exit: QThread/QLocalServer 잔류 객체까지 강제 종료 (좀비 프로세스 방지)
     os._exit(0)
 
@@ -58,6 +85,8 @@ def _handle_new_connection(server: "QLocalServer", window: MainWindow):
     conn = server.nextPendingConnection()
     if conn:
         conn.waitForReadyRead(300)
+        conn.write(b"ok")   # liveness 응답 (클라이언트 stale-pipe 오탐 방지)
+        conn.flush()
         conn.close()
     window._restore_from_tray()
 

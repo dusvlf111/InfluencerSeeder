@@ -57,6 +57,7 @@ winget install Google.Chrome --silent --accept-package-agreements --accept-sourc
 :: ----- Step 2: Virtual environment + dependencies -----
 :: Reuse the same venv as build_windows.bat (skips fast if it already exists).
 set VENV_PY=.venv_win\Scripts\python.exe
+set VENV_PYW=.venv_win\Scripts\pythonw.exe
 
 if not exist "%VENV_PY%" (
     echo [2/3] First run: creating venv and installing dependencies (2-5 min)...
@@ -72,7 +73,8 @@ if not exist "%VENV_PY%" (
         goto :fail
     )
 ) else (
-    "%VENV_PY%" -c "import PyQt6, selenium, webdriver_manager" > nul 2>&1
+    :: Check that Qt runtime is actually loadable (not just namespace package)
+    "%VENV_PY%" -c "from PyQt6.QtWidgets import QApplication; import selenium, webdriver_manager" > nul 2>&1
     if errorlevel 1 (
         echo [2/3] Installing missing dependencies...
         "%VENV_PY%" -m pip install -r requirements.txt --no-warn-script-location >> "%LOGFILE%" 2>&1
@@ -85,15 +87,44 @@ if not exist "%VENV_PY%" (
     )
 )
 
-:: ----- Step 3: Launch app (capture stderr so a crash leaves a readable log) -----
+:: ----- Step 3: Launch app -----
+:: Use pythonw.exe (no console window) so the CMD launcher can close cleanly.
+:: Errors are captured in run_error.log; if the app crashes within 3 seconds
+:: this window re-opens to show the log.
 echo [3/3] Starting app...
 echo.
-"%VENV_PY%" main.py 2> "%LOGFILE%"
-if errorlevel 1 goto :fail
 
-:: Normal exit — clean up the (empty) log.
+if not exist "%VENV_PYW%" set VENV_PYW=%VENV_PY%
+
+:: Write PID sentinel so we can detect an immediate crash
+if exist "%~dp0run_pid.tmp" del "%~dp0run_pid.tmp" > nul 2>&1
+
+start "" "%VENV_PYW%" main.py 2>"%LOGFILE%"
+
+:: Wait 3 seconds — if the log file is non-empty the app crashed immediately
+timeout /t 3 /nobreak > nul 2>&1
+
+if exist "%LOGFILE%" (
+    for %%A in ("%LOGFILE%") do if %%~zA gtr 0 goto :fail_log
+)
+
+:: Clean exit — remove empty log and close this window
 if exist "%LOGFILE%" del "%LOGFILE%" > nul 2>&1
 exit /b 0
+
+:fail_log
+echo.
+echo ============================================================
+echo [ERROR] App crashed at startup. Details:
+echo ------------------------------------------------------------
+type "%LOGFILE%"
+echo ------------------------------------------------------------
+echo Full log saved to: %LOGFILE%
+echo ============================================================
+echo.
+echo This window stays open so you can read the error.
+pause
+exit /b 1
 
 :fail
 echo.

@@ -1,4 +1,5 @@
 from PyQt6.QtCore import Qt, QEvent
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QMainWindow, QSplitter, QStackedWidget,
     QSystemTrayIcon, QMenu, QMessageBox, QApplication, QLabel,
@@ -10,7 +11,6 @@ from core.run_logger import RunLogger
 from ui.panels.control_panel import ControlPanel
 from ui.panels.results_panel import ResultsPanel
 from ui.settings_view import SettingsView
-from ui.dialogs.login_dialog import LoginWaitDialog
 
 try:
     from ui.panels.browser_panel import BrowserPanel
@@ -20,10 +20,14 @@ except Exception:
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, icon: QIcon | None = None):
         super().__init__()
         self.setWindowTitle("인플루언서 시딩기")
-        self.setMinimumSize(1200, 700)
+        # iPhone 12 Pro 논리 해상도(390 x 844)로 고정 — 모바일 UA 임베디드
+        # 브라우저와 동일 비율. 리사이즈 불가, 내부 컨텐츠는 스크롤로 처리.
+        self.setFixedSize(390, 844)
+        if icon and not icon.isNull():
+            self.setWindowIcon(icon)
 
         self._scraper: ScraperThread | None = None
         self._scrape_had_error = False

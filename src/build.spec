@@ -98,7 +98,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # icon="assets/icon.ico",  # Windows 아이콘 (준비 시 주석 해제)
+    icon=str(BASE / "assets" / "icon.ico"),
 )
 
 coll = COLLECT(
