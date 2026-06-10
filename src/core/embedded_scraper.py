@@ -576,7 +576,8 @@ class EmbeddedScraper(QObject):
             self.skip_signal.emit(norm)
             self._log(f"  [skip] 중복 건너뜀: @{norm}")
             self._post_idx += 1
-            return self._go_back(self._open_post)
+            # 게시물 페이지에 있으므로 뒤로가기 1번이면 태그 그리드로.
+            return self._go_back_n(1, self._open_post)
         # 프로필 진입(이름 클릭)
         self._step("프로필 이름 클릭")
         self._click_ready("profile_link", self._after_profile_click)
@@ -585,7 +586,8 @@ class EmbeddedScraper(QObject):
         if not ok:
             self._log("  [skip] 프로필 링크 실패")
             self._post_idx += 1
-            return self._go_back(self._open_post)
+            # 아직 게시물 페이지 → 뒤로가기 1번.
+            return self._go_back_n(1, self._open_post)
         self._after("step5", self._extract)
 
     def _extract(self):
@@ -594,16 +596,18 @@ class EmbeddedScraper(QObject):
 
     def _after_extract(self, data):
         info = parse_profile(data or {})
+        # 프로필 페이지에 있으므로, 복귀는 항상 뒤로가기 2번
+        # (프로필 → 게시물 → 태그 그리드).
         if not info or not info.get("username"):
             self._log("  [skip] 유저네임 추출 실패")
             self._post_idx += 1
-            return self._go_back(self._open_post)
+            return self._go_back_n(2, self._open_post)
         username = info["username"]
         norm = username.lower()
         if norm in self._seen:
             self.skip_signal.emit(username)
             self._post_idx += 1
-            return self._go_back(self._open_post)
+            return self._go_back_n(2, self._open_post)
         # 팔로워 필터
         if self.min_followers > 0 or self.max_followers > 0:
             f = parse_followers(info.get("followers", ""))
@@ -612,7 +616,7 @@ class EmbeddedScraper(QObject):
                 self._log(f"  [filter] @{username} {f:,} 범위 밖")
                 self._seen.add(norm)
                 self._post_idx += 1
-                return self._go_back(self._open_post)
+                return self._go_back_n(2, self._open_post)
         self._save(info)
 
     def _save(self, info):
@@ -634,22 +638,33 @@ class EmbeddedScraper(QObject):
                       f"followers={info.get('followers', '?')}  "
                       f"[{self._collected}/{self.count}]")
         self._post_idx += 1
-        self._after("step6", lambda: self._go_back(self._open_post))
+        # 저장 완료(프로필 페이지) → 뒤로가기 2번으로 태그 그리드 복귀.
+        self._after("step6", lambda: self._go_back_n(2, self._open_post))
 
-    def _go_back(self, cb):
-        """뒤로가기 클릭으로 그리드 복귀(back_button 후보, 폴백 history.back)."""
+    def _go_back_n(self, n, cb):
+        """뒤로가기를 n번 연속 수행한 뒤 cb(). 프로필→게시물→태그그리드처럼
+        여러 단계를 거슬러 올라갈 때 사용. 각 뒤로가기 사이에 딜레이를 둔다."""
+        if n <= 0 or not self._running:
+            return cb()
+        self._step(f"뒤로가기 ({n}번 남음)")
+        self._do_one_back(lambda: self._go_back_n(n - 1, cb))
+
+    def _do_one_back(self, cb):
+        """뒤로가기 1회(back_button 후보 클릭, 실패 시 history.back 폴백)."""
         cands = self._cands("back_button")
-        if cands:
-            self._js(build_click_js(cands), lambda idx: self._after_back(idx, cb))
-        else:
-            self._js("window.history.back(); true", lambda _ok: self._after("back", cb))
 
-    def _after_back(self, idx, cb):
-        if not (isinstance(idx, int) and idx >= 0):
-            # 후보 실패 → history.back 폴백.
-            self._js("window.history.back(); true", lambda _ok: self._after("back", cb))
-            return
-        self._after("back", cb)
+        def fallback(_ok=None):
+            self._js("window.history.back(); true", lambda _o: self._after("back", cb))
+
+        if cands:
+            def on_idx(idx):
+                if isinstance(idx, int) and idx >= 0:
+                    self._after("back", cb)
+                else:
+                    fallback()
+            self._js(build_click_js(cands), on_idx)
+        else:
+            fallback()
 
 
 # parse_keywords 를 가볍게 재사용(steps.py 의존 회피용 로컬 구현).
