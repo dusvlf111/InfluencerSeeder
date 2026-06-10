@@ -381,6 +381,74 @@ class EmbeddedScraper(QObject):
             self._log(f"  [ERROR] [click/{step_id}] 모든 후보 실패")
             cb(False)
 
+    # 요소가 로딩될 때까지 폴링 후 클릭(없다고 바로 넘어가지 않음).
+    _WAIT_TRIES = 8     # 최대 재시도 횟수
+    _WAIT_MS = 1500     # 재시도 간격(ms) → 최대 ~12초 대기
+
+    def _sleep(self, ms, fn):
+        QTimer.singleShot(int(ms), lambda: fn() if self._running else None)
+
+    def _click_ready(self, step_id, cb):
+        """후보 요소가 나타날 때까지 기다렸다 클릭. coord 후보가 있으면 끝까지
+        못 찾아도 좌표 클릭을 시도한다. cb(success)."""
+        cands = self._cands(step_id)
+        if not cands:
+            self._log(f"  [ERROR] {step_id} 후보 없음")
+            return cb(False)
+        has_coord = any(c.get("type") == "coord" for c in cands)
+
+        def attempt(left):
+            self._js(build_count_js(cands), lambda n: on_count(int(n or 0), left))
+
+        def on_count(n, left):
+            if n > 0:
+                self._js(build_click_js(cands), lambda idx: self._on_click(step_id, idx, cb))
+            elif left > 0 and self._running:
+                self._log(f"  [wait/{step_id}] 로딩 대기... ({self._WAIT_TRIES - left + 1}/{self._WAIT_TRIES})")
+                self._sleep(self._WAIT_MS, lambda: attempt(left - 1))
+            elif has_coord:
+                self._log(f"  [wait/{step_id}] 셀렉터 실패 → 좌표 클릭 시도")
+                self._js(build_click_js(cands), lambda idx: self._on_click(step_id, idx, cb))
+            else:
+                self._log(f"  [ERROR] [{step_id}] 요소 없음(대기 초과)")
+                cb(False)
+
+        attempt(self._WAIT_TRIES)
+
+    def _click_index_ready(self, step_id, index, cb):
+        """후보 매칭이 index 개 이상 될 때까지 기다렸다 index 번째 클릭. 결과가
+        있으나 index 가 모자라면 0번째라도 클릭. cb(success)."""
+        cands = self._cands(step_id)
+        if not cands:
+            self._log(f"  [ERROR] {step_id} 후보 없음")
+            return cb(False)
+
+        def attempt(left):
+            self._js(build_count_js(cands), lambda n: on_count(int(n or 0), left))
+
+        def on_count(n, left):
+            if n > index:
+                self._js(build_click_index_js(cands, index),
+                         lambda ok: self._on_idx(step_id, ok, cb))
+            elif n > 0:
+                self._js(build_click_index_js(cands, 0),
+                         lambda ok: self._on_idx(step_id, ok, cb))
+            elif left > 0 and self._running:
+                self._log(f"  [wait/{step_id}] 로딩 대기... ({self._WAIT_TRIES - left + 1}/{self._WAIT_TRIES})")
+                self._sleep(self._WAIT_MS, lambda: attempt(left - 1))
+            else:
+                self._log(f"  [ERROR] [{step_id}] 결과 없음(대기 초과)")
+                cb(False)
+
+        attempt(self._WAIT_TRIES)
+
+    def _on_idx(self, step_id, ok, cb):
+        if ok:
+            self._log(f"  [click/{step_id}] 클릭")
+            cb(True)
+        else:
+            cb(False)
+
     # ── 수집 시작/종료 ──────────────────────────────────────────────────────────
 
     def start(self):
@@ -413,7 +481,7 @@ class EmbeddedScraper(QObject):
         self._cur_keyword = self._keywords[self._kw_idx]
         self._kw_idx += 1
         self._step(f"검색 아이콘 클릭 (키워드 {self._kw_idx}/{len(self._keywords)})")
-        self._dismiss(lambda: self._click("search_icon", self._after_search_icon))
+        self._dismiss(lambda: self._click_ready("search_icon", self._after_search_icon))
 
     def _after_search_icon(self, ok):
         if not ok:
@@ -428,7 +496,7 @@ class EmbeddedScraper(QObject):
         # 전용 스텝 'search_box' 후보로 클릭(설정/우클릭 좌표로 지정 가능).
         # 후보가 없으면 검색 입력창(search_input) 으로 폴백.
         step = "search_box" if self._cands("search_box") else "search_input"
-        self._click(step, self._after_click_box)
+        self._click_ready(step, self._after_click_box)
 
     def _after_click_box(self, ok):
         if not ok:
@@ -449,11 +517,9 @@ class EmbeddedScraper(QObject):
         self._after("step2", self._do_tag)
 
     def _do_tag(self):
-        self._step("태그 결과 클릭")
-        self._dismiss(lambda: self._js(
-            build_click_index_js(self._cands("tag_result"), 0),
-            self._after_tag,
-        ))
+        self._step("태그 결과 클릭 (제안 로딩 대기)")
+        # 검색 제안은 비동기 로딩 → 나타날 때까지 폴링 후 클릭(없다고 바로 안 넘어감).
+        self._dismiss(lambda: self._click_index_ready("tag_result", 0, self._after_tag))
 
     def _after_tag(self, ok):
         if not ok:
@@ -513,7 +579,7 @@ class EmbeddedScraper(QObject):
             return self._go_back(self._open_post)
         # 프로필 진입(이름 클릭)
         self._step("프로필 이름 클릭")
-        self._click("profile_link", self._after_profile_click)
+        self._click_ready("profile_link", self._after_profile_click)
 
     def _after_profile_click(self, ok):
         if not ok:
