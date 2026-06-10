@@ -47,6 +47,8 @@ _FLOW_DEFAULTS: list[tuple[str, str]] = [
     ("scroll_max_attempts",      "15"),
     ("skip_visited_profile",     "true"),
     ("stop_on_consecutive_miss", "10"),
+    # 태그 검색 결과의 첫 썸네일은 본인 프로필이라 게시물이 아님 → 건너뜀.
+    ("skip_first_post",          "true"),
 ]
 
 _TARGET_DEFAULTS: list[tuple[str, str]] = [

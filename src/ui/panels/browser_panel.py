@@ -24,8 +24,10 @@ _HOME_URL = "https://www.instagram.com/"
 _IPHONE_W = 390
 _IPHONE_H = 844
 _EMBED_SCALE = 0.75
-_EMBED_W = round(_IPHONE_W * _EMBED_SCALE)   # 293
-_EMBED_H = round(_IPHONE_H * _EMBED_SCALE)   # 633
+# 세로 스크롤바가 콘텐츠를 밀어 가로 스크롤이 생기지 않도록 폭에 약간 여유를 둔다.
+_SCROLLBAR_PAD = 18  # CSS px
+_EMBED_W = round((_IPHONE_W + _SCROLLBAR_PAD) * _EMBED_SCALE)  # ~306
+_EMBED_H = round(_IPHONE_H * _EMBED_SCALE)                     # 633
 
 
 class BrowserPanel(QWebEngineView):

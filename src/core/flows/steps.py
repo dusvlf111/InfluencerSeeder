@@ -83,6 +83,33 @@ def click_coord(driver, thread, coord):
         thread._log(f"  [coord-err] click at {coord} failed: {exc}")
 
 
+def robust_click(driver, thread, el) -> bool:
+    """Click ``el`` with fallbacks for 'element click intercepted'.
+
+    Instagram's mobile nav overlays elements, so a direct ``.click()`` is often
+    intercepted by an overlapping div. Tries: direct click → scrollIntoView then
+    click → JavaScript click (bypasses overlay hit-testing). Returns True on the
+    first success, False if all fail (logged)."""
+    try:
+        el.click()
+        return True
+    except Exception:
+        pass
+    try:
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el)
+        el.click()
+        return True
+    except Exception:
+        pass
+    try:
+        driver.execute_script("arguments[0].click();", el)
+        thread._log("  [click] used JS click fallback (intercepted)")
+        return True
+    except Exception as exc:
+        thread._log(f"  [click-err] {exc}")
+        return False
+
+
 # ── Template param expansion (flow_steps ``param``) ─────────────────────────────
 
 def _expand_param(ctx, param: str) -> str:
@@ -128,7 +155,8 @@ class ClickStep(Step):
         if isinstance(el, tuple) and el[0] == "coord":
             click_coord(driver, t, el[1])
         else:
-            el.click()
+            if not robust_click(driver, t, el):
+                raise RuntimeError(f"{ref} click failed (intercepted)")
         if ref == "search_icon":
             t._log("  [1] search icon clicked")
         else:
@@ -235,7 +263,9 @@ class ClickIndexStep(Step):
                 t._log(f"  [{self.log_index}] only {len(tags)} tag(s) found, need index {index}")
                 return Outcome.NEXT_TAG
             label = tags[index].text.strip()
-            tags[index].click()
+            if not robust_click(driver, t, tags[index]):
+                t._log(f"  [{self.log_index}-err] click failed (intercepted)")
+                return Outcome.NEXT_TAG
             t._log(f"  [{self.log_index}] clicked tag suggestion [{index}]: {label!r}")
             return Outcome.CONTINUE
         except Exception as exc:
@@ -277,6 +307,10 @@ class CollectPostUrls(Step):
         from selenium.webdriver.support import expected_conditions as EC
         t, driver = ctx.thread, ctx.driver
         target = t.posts_per_tag
+        # 태그 그리드의 첫 썸네일은 본인 프로필이라 게시물이 아님 → 하나 더 모아
+        # 첫 항목을 버린다(§flow skip_first_post).
+        skip_first = getattr(t, "skip_first_post", True)
+        target_collect = target + (1 if skip_first else 0)
         by, value = t._get_by("post_link")
         urls: list[str] = []
         seen_hrefs: set[str] = set()
@@ -290,19 +324,23 @@ class CollectPostUrls(Step):
             ctx.post_urls = urls
             return Outcome.CONTINUE
 
-        while len(urls) < target and scroll_count < max_scrolls:
+        while len(urls) < target_collect and scroll_count < max_scrolls:
             for el in driver.find_elements(by, value):
                 href = (el.get_attribute("href") or "").split("?")[0]
                 if href and "/p/" in href and href not in seen_hrefs:
                     seen_hrefs.add(href)
                     urls.append(href)
-                if len(urls) >= target:
+                if len(urls) >= target_collect:
                     break
-            if len(urls) >= target:
+            if len(urls) >= target_collect:
                 break
             driver.execute_script("window.scrollBy(0, 1000);")
             time.sleep(1.5)
             scroll_count += 1
+
+        if skip_first and urls:
+            dropped = urls.pop(0)
+            t._log(f"  [4] skipped first thumbnail (self profile): {dropped}")
 
         t._log(f"  [4] collected {len(urls)} post URLs")
         ctx.post_urls = urls[:target]

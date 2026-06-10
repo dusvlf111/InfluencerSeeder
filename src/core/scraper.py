@@ -120,6 +120,8 @@ class ScraperThread(QThread):
         self.tag_start_index     = _flow_int("tag_start_index", 0)
         self.stop_on_consecutive_miss = _flow_int("stop_on_consecutive_miss", 10)
         self.skip_visited_profile = _truthy(self._flow.get("skip_visited_profile", "true"))
+        # 태그 그리드 첫 썸네일 = 본인 프로필 → 게시물 수집에서 제외(§flow).
+        self.skip_first_post = _truthy(self._flow.get("skip_first_post", "true"))
 
         # ── Target filters (§2.5) — fall back to legacy min/max_followers ───────
         def _tgt_int(key, default):
