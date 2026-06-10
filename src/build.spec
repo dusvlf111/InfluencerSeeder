@@ -10,7 +10,9 @@ a = Analysis(
     [str(BASE / "main.py")],
     pathex=[str(BASE)],
     binaries=[],
-    datas=[],
+    datas=[
+        (str(BASE / "assets"), "assets"),
+    ],
     hiddenimports=[
         # selenium core
         "selenium",
