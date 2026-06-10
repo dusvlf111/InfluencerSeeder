@@ -150,6 +150,22 @@ QHeaderView::section {{
     font-weight: 600;
 }}
 
+/* ── 결과 테이블(예쁘게) ── */
+QTableWidget#resultsTable {{
+    background-color: {C.surface};
+    alternate-background-color: {C.surface2};
+    border: 1px solid {C.border};
+    border-radius: {R.lg}px;
+}}
+QTableWidget#resultsTable::item {{
+    padding: 6px 8px;
+    border-bottom: 1px solid {C.surface2};
+}}
+QTableWidget#resultsTable::item:selected {{
+    background-color: {C.accent};
+    color: {C.text};
+}}
+
 /* ── ListWidget ── */
 QListWidget {{
     background-color: {C.bg};

@@ -72,22 +72,42 @@ class ResultsPanel(QWidget):
         toolbar.addWidget(btn_export)
         layout.addLayout(toolbar)
 
-        self._table = QTableWidget(0, 6)
+        # 컬럼: # | 유저네임 | 팔로워 | 팔로잉 | 게시물 | 소개 | 링크
+        self._table = QTableWidget(0, 7)
+        self._table.setObjectName("resultsTable")
         self._table.setHorizontalHeaderLabels(
-            ["#", "Username", "Followers", "Bio", "Website", "Post"]
+            ["#", "유저네임", "팔로워", "팔로잉", "게시물", "소개", "링크"]
         )
-        self._table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self._table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        hh = self._table.horizontalHeader()
+        hh.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)         # 소개
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # 유저네임
+        hh.setHighlightSections(False)
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._table.setAlternatingRowColors(True)
+        self._table.setShowGrid(False)
         self._table.verticalHeader().setVisible(False)
+        self._table.verticalHeader().setDefaultSectionSize(34)   # 넉넉한 행 높이
         self._table.setColumnWidth(0, 36)
-        self._table.setColumnWidth(2, 80)
-        self._table.setColumnWidth(5, 60)
+        self._table.setColumnWidth(2, 84)
+        self._table.setColumnWidth(3, 72)
+        self._table.setColumnWidth(4, 64)
+        self._table.setColumnWidth(6, 56)
         self._table.cellDoubleClicked.connect(self._on_cell_double_clicked)
         layout.addWidget(self._table)
         return tab
+
+    @staticmethod
+    def _fmt_count(v) -> str:
+        """수치 문자열을 천단위 콤마로 정리('3632'→'3,632'). 만/천 표기는 유지."""
+        s = str(v or "").strip()
+        if not s:
+            return ""
+        raw = s.replace(",", "")
+        if raw.isdigit():
+            return f"{int(raw):,}"
+        return s
 
     def _build_log_tab(self) -> QWidget:
         tab = QWidget()
@@ -182,30 +202,50 @@ class ResultsPanel(QWidget):
         self._update_progress_label()
 
     def _add_table_row(self, info: dict):
+        from PyQt6.QtGui import QColor, QFont
         row = self._table.rowCount()
         self._table.insertRow(row)
 
-        self._table.setItem(row, 0, QTableWidgetItem(str(row + 1)))
+        # # (회색, 가운데)
+        num = QTableWidgetItem(str(row + 1))
+        num.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        num.setForeground(QColor(C.muted2))
+        self._table.setItem(row, 0, num)
 
+        # 유저네임 (보라 강조, 굵게)
         username = info.get("username") or info.get("account", "").lstrip("@")
         user_item = QTableWidgetItem("@" + username if username else "")
-        user_item.setForeground(Qt.GlobalColor.white)
+        user_item.setForeground(QColor(C.accent_light))
+        f = QFont(); f.setBold(True); user_item.setFont(f)
         user_item.setData(Qt.ItemDataRole.UserRole, info.get("profile_url", ""))
+        user_item.setToolTip("더블클릭 → 프로필 열기")
         self._table.setItem(row, 1, user_item)
 
-        self._table.setItem(row, 2, QTableWidgetItem(info.get("followers", "")))
+        # 팔로워 / 팔로잉 / 게시물 (우측정렬, 천단위)
+        for col, key in ((2, "followers"), (3, "following"), (4, "posts_count")):
+            it = QTableWidgetItem(self._fmt_count(info.get(key, "")))
+            it.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            if col == 2:
+                it.setForeground(QColor(C.text))
+            self._table.setItem(row, col, it)
 
-        bio = info.get("bio", "")
-        self._table.setItem(row, 3, QTableWidgetItem(bio[:80] if bio else ""))
+        # 소개 (한 줄, 잘림 + 툴팁 전체)
+        bio = (info.get("bio", "") or "").replace("\n", " ").strip()
+        bio_item = QTableWidgetItem(bio[:120])
+        if bio:
+            bio_item.setToolTip(bio)
+            bio_item.setForeground(QColor(C.muted2))
+        self._table.setItem(row, 5, bio_item)
 
-        site_item = QTableWidgetItem(info.get("website", ""))
-        site_item.setData(Qt.ItemDataRole.UserRole + 1, info.get("website", ""))
-        self._table.setItem(row, 4, site_item)
-
-        link_item = QTableWidgetItem("Open")
-        link_item.setForeground(Qt.GlobalColor.cyan)
-        link_item.setData(Qt.ItemDataRole.UserRole, info.get("post_url", ""))
-        self._table.setItem(row, 5, link_item)
+        # 링크 (웹사이트>게시물>프로필 순으로 열기)
+        target = info.get("website") or info.get("post_url") or info.get("profile_url", "")
+        link_item = QTableWidgetItem("열기" if target else "")
+        link_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        if target:
+            link_item.setForeground(QColor(C.accent))
+            link_item.setData(Qt.ItemDataRole.UserRole, target)
+            link_item.setToolTip(target)
+        self._table.setItem(row, 6, link_item)
 
     def reset(self):
         self._results = []
@@ -238,18 +278,13 @@ class ResultsPanel(QWidget):
     # ── Cell interactions ─────────────────────────────────────────────────────
 
     def _on_cell_double_clicked(self, row: int, col: int):
-        if col == 5:
-            url = self._table.item(row, 5).data(Qt.ItemDataRole.UserRole)
-            if url:
-                QDesktopServices.openUrl(QUrl(url))
-        elif col == 1:
-            url = self._table.item(row, 1).data(Qt.ItemDataRole.UserRole)
-            if url:
-                QDesktopServices.openUrl(QUrl(url))
-        elif col == 4:
-            url = self._table.item(row, 4).data(Qt.ItemDataRole.UserRole + 1)
-            if url:
-                QDesktopServices.openUrl(QUrl(url))
+        # 유저네임(1) → 프로필, 링크(6) → 웹사이트/게시물. 그 외엔 무시.
+        item = self._table.item(row, col)
+        if item is None or col not in (1, 6):
+            return
+        url = item.data(Qt.ItemDataRole.UserRole)
+        if url:
+            QDesktopServices.openUrl(QUrl(url))
 
     # ── Import / Export ───────────────────────────────────────────────────────
 
