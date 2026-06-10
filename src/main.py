@@ -1,5 +1,16 @@
 import sys
 import os
+
+# QtWebEngine(Chromium)이 창 최소화/백그라운드 시 렌더러·타이머를 throttle 하지
+# 않도록 — 백그라운드 수집 중에도 JS 클릭/딜레이가 정상 속도로 동작하게 한다.
+# (WebEngine 초기화 전에 설정해야 적용됨)
+os.environ.setdefault(
+    "QTWEBENGINE_CHROMIUM_FLAGS",
+    "--disable-renderer-backgrounding "
+    "--disable-backgrounding-occluded-windows "
+    "--disable-background-timer-throttling",
+)
+
 from pathlib import Path
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
