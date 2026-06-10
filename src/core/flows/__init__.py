@@ -50,7 +50,13 @@ __all__ = [
 
 
 # ── Default registrations ──────────────────────────────────────────────────────
-from core.flows.hashtag import HashtagFlow  # noqa: E402
+from core.flows.hashtag import HashtagFlow            # noqa: E402
+from core.flows.configurable import ConfigurableFlow  # noqa: E402
 
-register("hashtag", HashtagFlow)
-register("keyword", HashtagFlow)   # alias — keyword mode reuses the hashtag flow
+# The default "hashtag"/"keyword" modes now run the data-driven ConfigurableFlow,
+# which interprets flow_steps.csv and falls back to HashtagFlow when that file is
+# empty/invalid. The original hard-coded flow stays available as a regression /
+# fallback baseline under "hashtag_legacy".
+register("hashtag", ConfigurableFlow)
+register("keyword", ConfigurableFlow)   # alias — keyword mode reuses the hashtag flow
+register("hashtag_legacy", HashtagFlow)

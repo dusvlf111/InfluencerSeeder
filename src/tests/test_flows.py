@@ -4,22 +4,28 @@ from unittest.mock import MagicMock, patch
 from core.flows import get_flow, register, Outcome, Step, Flow
 from core.flows.context import ScrapeContext
 from core.flows.hashtag import HashtagFlow
+from core.flows.configurable import ConfigurableFlow
 from core.scraper import ScraperThread
 
 
 class TestFlowRegistry:
-    def test_get_flow_hashtag_returns_hashtagflow(self):
+    def test_get_flow_hashtag_returns_configurable_flow(self):
+        # 260610-4: the default hashtag mode is now the data-driven ConfigurableFlow.
         flow = get_flow("hashtag")
-        assert isinstance(flow, HashtagFlow)
+        assert isinstance(flow, ConfigurableFlow)
         assert flow.mode == "hashtag"
 
-    def test_keyword_alias_maps_to_hashtagflow(self):
+    def test_keyword_alias_maps_to_configurable_flow(self):
         flow = get_flow("keyword")
+        assert isinstance(flow, ConfigurableFlow)
+
+    def test_hashtag_legacy_maps_to_hashtagflow(self):
+        flow = get_flow("hashtag_legacy")
         assert isinstance(flow, HashtagFlow)
 
     def test_unknown_mode_falls_back_to_hashtag(self):
         flow = get_flow("does-not-exist")
-        assert isinstance(flow, HashtagFlow)
+        assert isinstance(flow, ConfigurableFlow)
 
     def test_get_flow_returns_fresh_instances(self):
         assert get_flow("hashtag") is not get_flow("hashtag")
@@ -198,3 +204,213 @@ class TestHashtagFlowSmoke:
         appended.assert_not_called()
         assert "smallacct" in t._seen
         assert t._collected == 0
+
+
+# ── ConfigurableFlow (data-driven) ──────────────────────────────────────────────
+
+import core.storage as storage  # noqa: E402
+
+
+@pytest.fixture
+def tmp_data_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(storage, "DATA_DIR", tmp_path)
+    return tmp_path
+
+
+def _patch_config_steps(post_urls, profile_info):
+    """Patch the Selenium-driven Steps at their class seams (shared by
+    ConfigurableFlow and HashtagFlow) so the flow exercises only its
+    orchestration + the real dedup/filter/save path."""
+    from core.flows import steps as st
+
+    def _click(self, ctx):
+        return Outcome.CONTINUE
+
+    def _type(self, ctx):
+        return Outcome.CONTINUE
+
+    def _click_idx(self, ctx):
+        return Outcome.CONTINUE
+
+    def _collect(self, ctx):
+        ctx.post_urls = list(post_urls)
+        return Outcome.CONTINUE
+
+    def _peek(self, ctx):
+        uname = profile_info.get("username", "")
+        if uname and ctx.thread._should_skip(uname):
+            return Outcome.SKIP_POST
+        return Outcome.CONTINUE
+
+    def _nav(self, ctx):
+        ctx.profile_url = f"https://www.instagram.com/{profile_info['username']}/"
+        return Outcome.CONTINUE
+
+    def _extract(self, ctx):
+        ctx.profile_info = dict(profile_info)
+        return Outcome.CONTINUE
+
+    return [
+        patch.object(st.ClickStep, "execute", _click),
+        patch.object(st.TypeStep, "execute", _type),
+        patch.object(st.ClickIndexStep, "execute", _click_idx),
+        patch.object(st.CollectPostUrls, "execute", _collect),
+        patch.object(st.PeekUsernameGate, "execute", _peek),
+        patch.object(st.NavigateToProfile, "execute", _nav),
+        patch.object(st.ExtractProfile, "execute", _extract),
+    ]
+
+
+def _run_configurable(ctx, post_urls, profile_info, append_return=True):
+    from core.flows.configurable import ConfigurableFlow
+    patches = _patch_config_steps(post_urls, profile_info)
+    with patch("core.storage.append_result", return_value=append_return) as appended:
+        for p in patches:
+            p.start()
+        try:
+            ConfigurableFlow().run(ctx)
+        finally:
+            for p in patches:
+                p.stop()
+    return appended
+
+
+class TestConfigurableFlowDefault:
+    """ConfigurableFlow on the DEFAULT flow_steps must match HashtagFlow's
+    observable behavior: same append_result calls, signals, _collected, and
+    back-navigation. Storage is patched (tmp DATA_DIR + append_result)."""
+
+    def _driver(self):
+        d = MagicMock()
+        d.current_url = "https://www.instagram.com/explore/tags/intern/"
+        return d
+
+    def test_single_valid_profile_saved(self, tmp_data_dir):
+        t = _make_thread()
+        driver = self._driver()
+        ctx = ScrapeContext(thread=t, driver=driver)
+        info = {"username": "newuser", "followers": "5천"}
+        appended = _run_configurable(ctx, ["https://www.instagram.com/p/abc/"], info)
+        appended.assert_called_once()
+        saved = appended.call_args[0][0]
+        assert saved["username"] == "newuser"
+        assert saved["source_tag"] == "인턴"
+        assert saved["source_post_url"] == "https://www.instagram.com/p/abc/"
+        t.result_signal.emit.assert_called_once()
+        assert t._collected == 1
+
+    def test_zero_posts_no_save(self, tmp_data_dir):
+        t = _make_thread()
+        ctx = ScrapeContext(thread=t, driver=self._driver())
+        appended = _run_configurable(ctx, [], {"username": "x"})
+        appended.assert_not_called()
+        t.result_signal.emit.assert_not_called()
+
+    def test_duplicate_profile_skipped(self, tmp_data_dir):
+        t = _make_thread()
+        t._seen = {"dupuser"}
+        ctx = ScrapeContext(thread=t, driver=self._driver())
+        info = {"username": "dupuser", "followers": "5천"}
+        appended = _run_configurable(ctx, ["https://www.instagram.com/p/abc/"], info)
+        appended.assert_not_called()
+        t.skip_signal.emit.assert_called_with("dupuser")
+        assert t._collected == 0
+
+    def test_follower_filter_miss_marked_seen(self, tmp_data_dir):
+        t = _make_thread(min_followers=10_000)
+        ctx = ScrapeContext(thread=t, driver=self._driver())
+        info = {"username": "smallacct", "followers": "5천"}
+        appended = _run_configurable(ctx, ["https://www.instagram.com/p/abc/"], info)
+        appended.assert_not_called()
+        assert "smallacct" in t._seen
+        assert t._collected == 0
+
+    def test_go_back_returns_to_tag_grid(self, tmp_data_dir):
+        t = _make_thread()
+        driver = self._driver()
+        ctx = ScrapeContext(thread=t, driver=driver)
+        info = {"username": "newuser", "followers": "5천"}
+        _run_configurable(ctx, ["https://www.instagram.com/p/abc/"], info)
+        # Default go_back step does driver.get(tag_grid_url) after a save.
+        grid = "https://www.instagram.com/explore/tags/intern/"
+        assert any(c.args and c.args[0] == grid for c in driver.get.call_args_list)
+
+    def test_blocked_after_tag_click_aborts(self, tmp_data_dir):
+        t = _make_thread(_is_blocked=lambda driver: True)
+        driver = self._driver()
+        ctx = ScrapeContext(thread=t, driver=driver)
+        _run_configurable(ctx, ["https://www.instagram.com/p/abc/"],
+                          {"username": "x", "followers": "5천"})
+        t.blocked_signal.emit.assert_called_once()
+        assert t._blocked is True
+        assert t._collected == 0
+
+
+class TestConfigurableFlowEditing:
+    """Edited flow_steps: disabled steps skipped, unsupported actions ignored,
+    empty/invalid steps fall back to HashtagFlow."""
+
+    def _driver(self):
+        d = MagicMock()
+        d.current_url = "https://www.instagram.com/explore/tags/intern/"
+        return d
+
+    def test_disabled_save_skips_persist(self, tmp_data_dir):
+        rows = storage.flow_steps_defaults()
+        for r in rows:
+            if r["action"] == "save":
+                r["enabled"] = False
+        storage.save_flow_steps(rows)
+        t = _make_thread()
+        ctx = ScrapeContext(thread=t, driver=self._driver())
+        info = {"username": "newuser", "followers": "5천"}
+        appended = _run_configurable(ctx, ["https://www.instagram.com/p/abc/"], info)
+        appended.assert_not_called()
+        assert t._collected == 0
+
+    def test_unsupported_action_ignored(self, tmp_data_dir):
+        # load_flow_steps drops unknown actions; even if one slipped into the
+        # plan, _build_plan filters it. Inject via raw CSV to be sure.
+        import csv as _csv
+        path = tmp_data_dir / "flow_steps.csv"
+        rows = storage.flow_steps_defaults()
+        with open(path, "w", newline="", encoding="utf-8-sig") as f:
+            w = _csv.DictWriter(
+                f, fieldnames=["order", "phase", "step_name", "action",
+                               "selector_ref", "param", "enabled"])
+            w.writeheader()
+            for r in rows:
+                out = dict(r)
+                out["enabled"] = "true"
+                w.writerow(out)
+            w.writerow({"order": 99, "phase": "per_post", "step_name": "bogus",
+                        "action": "frobnicate", "selector_ref": "", "param": "",
+                        "enabled": "true"})
+        t = _make_thread()
+        ctx = ScrapeContext(thread=t, driver=self._driver())
+        info = {"username": "newuser", "followers": "5천"}
+        appended = _run_configurable(ctx, ["https://www.instagram.com/p/abc/"], info)
+        # Unknown action ignored; normal save still happens.
+        appended.assert_called_once()
+        assert t._collected == 1
+
+    def test_empty_flow_steps_falls_back(self, tmp_data_dir):
+        # All steps disabled → empty plan → HashtagFlow fallback (still saves).
+        rows = storage.flow_steps_defaults()
+        for r in rows:
+            r["enabled"] = False
+        storage.save_flow_steps(rows)
+        from core.flows import configurable as cfg
+        called = {"n": 0}
+        real_run = HashtagFlow.run
+
+        def _spy(self, ctx):
+            called["n"] += 1
+            return real_run(self, ctx)
+
+        t = _make_thread()
+        ctx = ScrapeContext(thread=t, driver=self._driver())
+        info = {"username": "newuser", "followers": "5천"}
+        with patch.object(cfg.HashtagFlow, "run", _spy):
+            _run_configurable(ctx, ["https://www.instagram.com/p/abc/"], info)
+        assert called["n"] == 1
