@@ -76,14 +76,14 @@
         - [x] 1.1.T1 pytest 테스트 작성 (`tests/test_storage.py` 에 `class TestWeb` 추가): 파일 없을 때 defaults 반환·파일 생성, round-trip, 손상 파일 시 defaults, 누락 키 기본값 머지.
         - [x] 1.1.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestWeb -v` 실행 및 검증
 
-    - [ ] 1.2 selectors.csv 확장 — priority + fallback 체인
+    - [x] 1.2 selectors.csv 확장 — priority + fallback 체인
         **작업 상세:** §2.2 스키마로 `_SELECTOR_FIELDNAMES = ["step_id","step_name","priority","selector_type","selector_value"]` 확장.
         `_SELECTOR_DEFAULTS` 를 PRD §2.2 표(step 당 여러 후보 + priority) 기준으로 재작성 — 최소 step_id: `search_icon, search_input, tag_result, post_link, profile_link, username_text, followers_count, following_count, posts_count, bio_text, website_link`.
         `load_selectors() -> list[dict]` 는 **`step_id` 별로 `priority` 오름차순 정렬**해 반환 (priority 결측 시 `9999`). `priority` 는 `_coerce` 로 int 화. `save_selectors(rows)` 는 새 필드 포함.
         하위호환: 기존 행에 `priority` 없으면 기본 `1` 로 채운다. `coord` 타입(`selector_value="x,y"`)도 허용(검증은 Push2).
         **참조:** PRD §2.2, 이미지 `1_돋보기 클릭.png`/`3_테그 클릭.png`/`5_게시물에서 프로필 클릭.png`/`6_프로필 이미지에서 정보 저장.png`, `src/core/storage.py` (selector 패턴), `src/core/scraper.py` `_get_by`
-        - [ ] 1.2.T1 pytest 테스트 (`class TestSelectors`): defaults 반환·파일 생성, priority 오름차순 정렬 검증, round-trip(새 필드), priority 결측 시 보정, 손상 파일 시 defaults.
-        - [ ] 1.2.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestSelectors -v` 실행 및 검증
+        - [x] 1.2.T1 pytest 테스트 (`class TestSelectors`): defaults 반환·파일 생성, priority 오름차순 정렬 검증, round-trip(새 필드), priority 결측 시 보정, 손상 파일 시 defaults.
+        - [x] 1.2.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestSelectors -v` 실행 및 검증
 
     - [ ] 1.3 delays.csv — `load_delays()` / `save_delays(dict)`
         **작업 상세:** §2.3 스키마(step_id,delay_min,delay_max). `_DELAY_DEFAULTS` 에 `step1~step6, back, scroll, typing_char` 의 (min,max) 정의(PRD 값 그대로).
