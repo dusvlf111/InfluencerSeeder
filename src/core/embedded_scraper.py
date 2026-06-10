@@ -134,6 +134,25 @@ _PEEK_USERNAME_JS = """
 """ % json.dumps(sorted(_BLACKLISTED_PATHS))
 
 
+# 현재 페이지 종류를 URL(pathname) 기준으로 판별:
+# login / tag(태그 그리드) / explore(검색·탐색) / post(게시물) / home / profile / unknown
+_PAGE_STATE_JS = r"""
+(function(){
+    var p = location.pathname || "";
+    if (/\/accounts\/login|\/challenge|\/accounts\/suspended/.test(p)) return "login";
+    if (/^\/explore\/tags\//.test(p)) return "tag";
+    if (/^\/explore\//.test(p)) return "explore";
+    if (/^\/(p|reel)\//.test(p)) return "post";
+    if (p === "/" || p === "") return "home";
+    var seg = p.replace(/^\/|\/$/g, "").split("/");
+    var bl = ["explore","p","reel","reels","stories","direct","accounts",
+              "about","privacy","legal","terms","help","tv","tagged"];
+    if (seg.length === 1 && seg[0] && bl.indexOf(seg[0]) === -1) return "profile";
+    return "unknown";
+})()
+"""
+
+
 _PROFILE_JS = """
 (function(){
     var meta = document.querySelector("meta[name='description']");
@@ -701,8 +720,7 @@ class EmbeddedScraper(QObject):
             self.skip_signal.emit(norm)
             self._log(f"  [skip] 중복 건너뜀: @{norm}")
             self._post_idx += 1
-            # 게시물 페이지에 있으므로 뒤로가기 1번이면 태그 그리드로.
-            return self._go_back_n(1, self._open_post)
+            return self._go_back_to_listing(self._open_post)
         # 프로필 진입(이름 클릭)
         self._step("프로필 이름 클릭")
         self._click_ready("profile_link", self._after_profile_click)
@@ -711,8 +729,7 @@ class EmbeddedScraper(QObject):
         if not ok:
             self._log("  [skip] 프로필 링크 실패")
             self._post_idx += 1
-            # 아직 게시물 페이지 → 뒤로가기 1번.
-            return self._go_back_n(1, self._open_post)
+            return self._go_back_to_listing(self._open_post)
         self._after("step5", self._extract)
 
     def _extract(self):
@@ -772,11 +789,34 @@ class EmbeddedScraper(QObject):
         after_cb()
 
     def _after_extract(self, data):
-        # 해시태그 모드: 프로필에서 복귀 = 뒤로가기 2번(프로필→게시물→그리드).
+        # 해시태그 모드: 저장 후 '목록(태그 그리드)'에 도달할 때까지 뒤로가기.
         info = parse_profile(data or {})
         self._post_idx += 1
         self._after("step6", lambda: self._save_info(
-            info, lambda: self._go_back_n(2, self._open_post)))
+            info, lambda: self._go_back_to_listing(self._open_post)))
+
+    # ── 현재 페이지 판별 / 페이지 기반 뒤로가기 ─────────────────────────────────
+
+    def _page_state(self, cb):
+        """현재 페이지 종류를 cb(state) 로 전달(login/tag/explore/post/home/profile)."""
+        self._js(_PAGE_STATE_JS, lambda s: cb(s or "unknown"))
+
+    def _go_back_to_listing(self, cb, left=4):
+        """게시물/프로필 페이지면 목록(태그/탐색/홈)에 닿을 때까지 뒤로가기.
+
+        고정 횟수 대신 현재 페이지를 확인하며 되돌아가, 인스타 네비게이션 차이에도
+        정확히 목록으로 복귀한다(프로필→게시물→그리드 또는 프로필→검색결과)."""
+        if not self._running:
+            return cb()
+        self._page_state(lambda pg: self._on_back_page(pg, cb, left))
+
+    def _on_back_page(self, pg, cb, left):
+        if pg in ("post", "profile") and left > 0:
+            self._log(f"  [page] {pg} → 뒤로가기")
+            self._do_one_back(lambda: self._sleep(400, lambda: self._go_back_to_listing(cb, left - 1)))
+        else:
+            self._log(f"  [page] 목록 도달({pg})")
+            cb()
 
     # ── 캡션 키워드 모드(검색결과=계정 목록, 클릭하면 바로 프로필) ───────────────
 
@@ -806,17 +846,9 @@ class EmbeddedScraper(QObject):
     def _kw_after_extract(self, data):
         info = parse_profile(data or {})
         self._kw_res_idx += 1
-        # 캡션 모드: 결과 클릭으로 바로 프로필 → 복귀 뒤로가기 1번(검색결과로).
+        # 캡션 모드: 프로필 → '목록(검색결과)' 도달까지 뒤로가기.
         self._after("step6", lambda: self._save_info(
-            info, lambda: self._go_back_n(1, self._kw_open)))
-
-    def _go_back_n(self, n, cb):
-        """뒤로가기를 n번 연속 수행한 뒤 cb(). 프로필→게시물→태그그리드처럼
-        여러 단계를 거슬러 올라갈 때 사용. 각 뒤로가기 사이에 딜레이를 둔다."""
-        if n <= 0 or not self._running:
-            return cb()
-        self._step(f"뒤로가기 ({n}번 남음)")
-        self._do_one_back(lambda: self._go_back_n(n - 1, cb))
+            info, lambda: self._go_back_to_listing(self._kw_open)))
 
     def _do_one_back(self, cb):
         """뒤로가기 1회(back_button 후보 클릭, 실패 시 history.back 폴백)."""
