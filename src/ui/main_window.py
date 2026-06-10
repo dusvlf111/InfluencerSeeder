@@ -100,8 +100,10 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def show_main(self):
+        # 설정에서 편집한 타겟(검색 조건)·제외 계정을 컨트롤 패널에 즉시 반영.
         self._stack.setCurrentIndex(0)
-        self._control._apply_saved_settings()
+        self._control.apply_target(storage.load_target())
+        self._control.reload_excluded()
         self._refresh_resume()
 
     def _refresh_resume(self):
@@ -109,6 +111,10 @@ class MainWindow(QMainWindow):
         self._control.set_resume_available(storage.load_state() is not None)
 
     def show_settings(self):
+        # 컨트롤 패널의 현재 검색 조건을 target.csv 에 먼저 반영(양방향 동기화) —
+        # 타겟 전용 필드는 보존하고 공유 필드만 덮어쓴다.
+        merged = {**storage.load_target(), **self._control.current_target()}
+        storage.save_target(merged)
         self._settings_view.load()
         self._stack.setCurrentIndex(1)
 
@@ -375,7 +381,8 @@ class MainWindow(QMainWindow):
                 pass
 
     def changeEvent(self, event):
-        """최소화 시 트레이로 숨긴다(트레이 사용 가능 시). 수집은 QThread 라 계속."""
+        """최소화 시 트레이로 숨긴다. 수집은 메인스레드 이벤트루프(QTimer/JS 콜백)
+        라 앱이 살아있는 한 트레이에서도 계속 진행된다."""
         if (
             event.type() == QEvent.Type.WindowStateChange
             and self.isMinimized()
