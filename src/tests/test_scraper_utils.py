@@ -235,6 +235,40 @@ class TestHumanType:
         uni.assert_called_with(0.2, 0.4)
 
 
+class TestShouldSkip:
+    def _make_thread(self, seen):
+        t = ScraperThread.__new__(ScraperThread)
+        t._seen = set(seen)
+        t._log = lambda msg: None
+        t.skip_signal = MagicMock()
+        return t
+
+    def test_seen_username_skipped(self):
+        t = self._make_thread({"abc"})
+        assert t._should_skip("abc") is True
+        t.skip_signal.emit.assert_called_once_with("abc")
+
+    def test_unseen_username_not_skipped(self):
+        t = self._make_thread({"abc"})
+        assert t._should_skip("xyz") is False
+        t.skip_signal.emit.assert_not_called()
+
+    def test_case_and_at_normalization(self):
+        t = self._make_thread({"abc"})
+        assert t._should_skip("@ABC") is True
+
+    def test_filter_failed_added_then_skipped(self):
+        t = self._make_thread(set())
+        assert t._should_skip("newuser") is False
+        # caller marks filter-failed username as seen
+        t._seen.add(t._norm_username("newuser"))
+        assert t._should_skip("NewUser") is True
+
+    def test_empty_username_not_skipped(self):
+        t = self._make_thread({"abc"})
+        assert t._should_skip("") is False
+
+
 class TestScraperThreadPassesFollowerFilter:
     def _make_thread(self, min_f=0, max_f=0):
         t = ScraperThread.__new__(ScraperThread)

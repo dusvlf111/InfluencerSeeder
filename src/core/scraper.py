@@ -192,6 +192,8 @@ class ScraperThread(QThread):
     error_signal         = pyqtSignal(str)
     waiting_login_signal = pyqtSignal()
     step_signal          = pyqtSignal(str)   # current step description for status bar
+    skip_signal          = pyqtSignal(str)   # username skipped as duplicate (§6)
+    blocked_signal       = pyqtSignal()      # block/challenge detected (§5)
 
     def __init__(
         self,
@@ -343,6 +345,28 @@ class ScraperThread(QThread):
         self._log(f"  [ERROR] [selector/{step_id}] all selectors failed")
         return None
 
+    # ── Dedup gate (§6) ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def _norm_username(username: str) -> str:
+        return (username or "").lstrip("@").strip().lower()
+
+    def _should_skip(self, username: str) -> bool:
+        """Early dedup gate: True if username already seen (results∪excluded∪seen).
+
+        Emits ``skip_signal`` and logs on a hit. Does NOT mark the username as
+        seen — callers add filter-failed usernames via ``self._seen.add(...)``.
+        """
+        norm = self._norm_username(username)
+        seen = getattr(self, "_seen", None)
+        if seen is None:
+            seen = self._seen = set()
+        if norm and norm in seen:
+            self.skip_signal.emit(username)
+            self._log(f"  [skip] 중복 건너뜀: @{norm}")
+            return True
+        return False
+
     # ── Step implementations ──────────────────────────────────────────────────
 
     def _step1_click_search_icon(self, driver):
@@ -436,6 +460,27 @@ class ScraperThread(QThread):
 
         self._log(f"  [4] collected {len(urls)} post URLs")
         return urls[:target]
+
+    def _peek_username_from_post(self, driver) -> str:
+        """Return the candidate username from the current post page's profile
+        link WITHOUT navigating. Empty string if none found. Used by the early
+        dedup gate (§6) to skip Step5/Step6 for already-seen profiles."""
+        from selenium.webdriver.common.by import By
+        by, value = self._get_by("profile_link")
+        try:
+            els = driver.find_elements(by, value)
+            for el in els:
+                href = (el.get_attribute("href") or "").rstrip("/")
+                username_part = href.split("/")[-1]
+                if (
+                    username_part
+                    and username_part not in _BLACKLISTED_PATHS
+                    and re.match(r'^[A-Za-z0-9_.]+$', username_part)
+                ):
+                    return username_part
+        except Exception as exc:
+            self._log(f"  [peek-err] {exc}")
+        return ""
 
     def _step5_navigate_to_profile(self, driver) -> str:
         """Step 5: Find profile link in current post page and navigate to it.
@@ -599,6 +644,9 @@ class ScraperThread(QThread):
             from core.storage import load_results
             seen: set[str] = {r.get("username", "") for r in load_results() if r.get("username")}
 
+            # Unified seen set for early dedup gate (§6).
+            self._seen = {u.lower() for u in seen if u} | excluded
+
             keyword   = self.search_term.lstrip("#")
             collected = 0
 
@@ -660,6 +708,13 @@ class ScraperThread(QThread):
                         self._log(f"  [4-err] {exc}")
                         continue
                     self._random_delay("step4")
+
+                    # --- Early dedup gate (§6): peek username before Step5 ---
+                    peeked = self._peek_username_from_post(driver)
+                    if peeked and self._should_skip(peeked):
+                        driver.get(tag_grid_url)
+                        time.sleep(1.0)
+                        continue
 
                     # --- Step 5 ---
                     self._step("Step 5/6 — Navigating to profile")

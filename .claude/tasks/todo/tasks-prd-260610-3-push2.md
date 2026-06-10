@@ -99,13 +99,13 @@
         - [x] 2.3.T1 pytest (`class TestHumanType`): MagicMock el 로 `send_keys` 호출 횟수 == len(text), `time.sleep` patch 호출됨, 빈 문자열 시 호출 0회.
         - [x] 2.3.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestHumanType -v` 실행 및 검증
 
-    - [ ] 2.4 `_should_skip(username)` — 조기 dedup 게이트 (§6)
+    - [x] 2.4 `_should_skip(username)` — 조기 dedup 게이트 (§6)
         **작업 상세:** §6. `self._seen` set(= `storage.seen_usernames()` ∪ 정규화된 `excluded_set`, 생성자에서 구성) 기준.
         `_should_skip(self, username) -> bool`: `username.lstrip("@").lower()` 가 `self._seen` 에 있으면 True. True 면 `skip_signal.emit(username)` + `_log("[skip] 중복 건너뜀")`. 필터 미통과 username 도 `self._seen.add()` 로 재방문 방지(저장은 호출측).
         run() 플로우에 게이트 삽입: Step4 게시물 진입 후 가능한 한 **프로필 진입(Step5) 전** 헤더에서 username 추출해 `_should_skip` → True 면 Step5/6 생략하고 다음 게시물.
         **참조:** PRD §6, 이미지 `5_게시물에서 프로필 클릭.png`
-        - [ ] 2.4.T1 pytest (`class TestShouldSkip`): seen 에 있는 username True + skip_signal emit, 없는 username False, 대소문자/@ 정규화, 필터 탈락 username add 후 재호출 True.
-        - [ ] 2.4.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestShouldSkip -v` 실행 및 검증
+        - [x] 2.4.T1 pytest (`class TestShouldSkip`): seen 에 있는 username True + skip_signal emit, 없는 username False, 대소문자/@ 정규화, 필터 탈락 username add 후 재호출 True.
+        - [x] 2.4.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestShouldSkip -v` 실행 및 검증
 
     - [ ] 2.5 생성자 재편 + state 재개 + step 완료마다 save_state
         **작업 상세:** §9. 생성자 시그니처를 PRD 기준으로 확장: `web, selectors, delays, flow, target, excluded_set, resume_state=None` 주입(기존 호출부 호환 위해 **키워드 기본값** 제공, 누락 시 `storage.load_*()` 로 자체 로드).
