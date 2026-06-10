@@ -48,10 +48,14 @@ def _build_chrome_options(web: dict | None = None):
     # 준비(DOMContentLoaded) 시점에 반환하므로 이를 피한다.
     options.page_load_strategy = "eager"
     options.add_argument("--disable-dev-shm-usage")  # /dev/shm 고갈로 인한 렌더러 크래시 방지
-    options.add_argument("--disable-gpu")            # GPU 프로세스發 렌더러 행 방지
+    options.add_argument("--no-sandbox")             # 렌더러 기동 실패 완화
 
     if _truthy(web.get("headless")):
         options.add_argument("--headless=new")
+        # --disable-gpu 는 headless 에서만. headful Chrome(149+) + 모바일
+        # 에뮬레이션과 함께 쓰면 "Timed out receiving message from renderer"
+        # 렌더러 행을 유발하므로 창 모드에서는 추가하지 않는다.
+        options.add_argument("--disable-gpu")
 
     # iPhone 12 Pro 디바이스 에뮬레이션 — 논리 해상도 390x844, DPR 3, iOS Safari UA.
     # (Chrome DevTools 의 "iPhone 12 Pro" 프리셋과 동일한 메트릭/UA)
@@ -63,8 +67,8 @@ def _build_chrome_options(web: dict | None = None):
 
     mobile = _truthy(web.get("mobile_ua"))
     if mobile:
-        options.add_argument(f"--user-agent={_IPHONE_UA}")
-        # iPhone 12 Pro 뷰포트 + 터치 에뮬레이션
+        # UA 는 mobileEmulation 안에서만 지정한다. --user-agent 인자와 동시에
+        # 주면 UA 가 이중 설정돼 렌더러가 혼란/행에 빠질 수 있다(중복 제거).
         options.add_argument("--window-size=390,844")
         mobile_emulation = {
             "deviceMetrics": {"width": 390, "height": 844, "pixelRatio": 3.0},
