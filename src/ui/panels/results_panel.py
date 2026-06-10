@@ -72,15 +72,15 @@ class ResultsPanel(QWidget):
         toolbar.addWidget(btn_export)
         layout.addLayout(toolbar)
 
-        # 컬럼: # | 유저네임 | 팔로워 | 팔로잉 | 게시물 | 소개 | 링크 | 상세
-        self._table = QTableWidget(0, 8)
+        # 컬럼: # | 유저네임 | 팔로워 | 팔로잉 | 게시물 | 링크 | 상세
+        # (소개는 표에서 잘려 안 보여 제외 — 전체 소개글은 '상세'에서 확인)
+        self._table = QTableWidget(0, 7)
         self._table.setObjectName("resultsTable")
         self._table.setHorizontalHeaderLabels(
-            ["#", "유저네임", "팔로워", "팔로잉", "게시물", "소개", "링크", "상세"]
+            ["#", "유저네임", "팔로워", "팔로잉", "게시물", "링크", "상세"]
         )
         hh = self._table.horizontalHeader()
-        hh.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)         # 소개
-        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # 유저네임
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # 유저네임이 남는 폭 흡수
         hh.setHighlightSections(False)
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -93,9 +93,10 @@ class ResultsPanel(QWidget):
         self._table.setColumnWidth(2, 84)
         self._table.setColumnWidth(3, 72)
         self._table.setColumnWidth(4, 64)
-        self._table.setColumnWidth(6, 56)
-        self._table.setColumnWidth(7, 64)
+        self._table.setColumnWidth(5, 56)   # 링크
+        self._table.setColumnWidth(6, 56)   # 상세
         self._table.cellDoubleClicked.connect(self._on_cell_double_clicked)
+        self._table.cellClicked.connect(self._on_cell_clicked)
 
         self._detail_dialog = None
 
@@ -233,15 +234,7 @@ class ResultsPanel(QWidget):
                 it.setForeground(QColor(C.text))
             self._table.setItem(row, col, it)
 
-        # 소개 (한 줄, 잘림 + 툴팁 전체)
-        bio = (info.get("bio", "") or "").replace("\n", " ").strip()
-        bio_item = QTableWidgetItem(bio[:120])
-        if bio:
-            bio_item.setToolTip(bio)
-            bio_item.setForeground(QColor(C.muted2))
-        self._table.setItem(row, 5, bio_item)
-
-        # 링크 (웹사이트>게시물>프로필 순으로 열기)
+        # 링크 (웹사이트>게시물>프로필 순으로 열기 — 더블클릭)
         target = info.get("website") or info.get("post_url") or info.get("profile_url", "")
         link_item = QTableWidgetItem("열기" if target else "")
         link_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -249,13 +242,14 @@ class ResultsPanel(QWidget):
             link_item.setForeground(QColor(C.accent))
             link_item.setData(Qt.ItemDataRole.UserRole, target)
             link_item.setToolTip(target)
-        self._table.setItem(row, 6, link_item)
+        self._table.setItem(row, 5, link_item)
 
-        # 상세 버튼 — 클릭 시 캡쳐+정보 상세창(좌우 분할, 이전/다음 네비) 표시
-        btn_detail = QPushButton("상세")
-        btn_detail.setToolTip("프로필 캡쳐 + 상세 정보 보기")
-        btn_detail.clicked.connect(lambda _=False, r=row: self._open_detail(r))
-        self._table.setCellWidget(row, 7, btn_detail)
+        # 상세 ('열기' 글자 — 클릭 시 캡쳐+정보 상세창 표시)
+        detail_item = QTableWidgetItem("열기")
+        detail_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        detail_item.setForeground(QColor(C.accent_light))
+        detail_item.setToolTip("프로필 캡쳐 + 상세 정보 보기")
+        self._table.setItem(row, 6, detail_item)
 
     def load_existing(self):
         """기존 results.csv 를 표에 불러와 누적분이 항상 보이게 한다."""
@@ -318,10 +312,15 @@ class ResultsPanel(QWidget):
         dlg.raise_()
         dlg.activateWindow()
 
+    def _on_cell_clicked(self, row: int, col: int):
+        # 상세(6) → '열기' 글자 클릭 시 상세창. 그 외 컬럼은 무시(행 선택만).
+        if col == 6:
+            self._open_detail(row)
+
     def _on_cell_double_clicked(self, row: int, col: int):
-        # 유저네임(1) → 프로필, 링크(6) → 웹사이트/게시물. 그 외엔 무시.
+        # 유저네임(1) → 프로필, 링크(5) → 웹사이트/게시물. 그 외엔 무시.
         item = self._table.item(row, col)
-        if item is None or col not in (1, 6):
+        if item is None or col not in (1, 5):
             return
         url = item.data(Qt.ItemDataRole.UserRole)
         if url:

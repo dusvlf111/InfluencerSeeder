@@ -5,14 +5,15 @@
 """
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QFont
+from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtGui import QPixmap, QFont, QDesktopServices
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QWidget, QFrame,
+    QScrollArea, QWidget, QFrame, QApplication,
 )
 
-# (표시 라벨, info 키) — 값이 비면 건너뛴다.
+# (표시 라벨, info 키) — 값이 비면 건너뛴다. URL(프로필 URL)은 텍스트로 보여주지
+# 않고 하단의 [URL 복사]/[URL 이동] 버튼으로 다룬다.
 _FIELDS: list[tuple[str, str]] = [
     ("유저네임",   "username"),
     ("팔로워",     "followers"),
@@ -20,7 +21,6 @@ _FIELDS: list[tuple[str, str]] = [
     ("게시물",     "posts_count"),
     ("소개글",     "bio"),
     ("웹사이트",   "website"),
-    ("프로필 URL", "profile_url"),
     ("출처 태그",  "source_tag"),
     ("수집일",     "collected_at"),
 ]
@@ -92,6 +92,12 @@ class ProfileDetailDialog(QDialog):
         rl.addWidget(scroll, 1)
 
         footer = QHBoxLayout()
+        self._btn_copy = QPushButton("URL 복사")
+        self._btn_copy.clicked.connect(self._copy_url)
+        self._btn_open = QPushButton("URL 이동")
+        self._btn_open.clicked.connect(self._open_url)
+        footer.addWidget(self._btn_copy)
+        footer.addWidget(self._btn_open)
         footer.addStretch()
         btn_close = QPushButton("닫기")
         btn_close.clicked.connect(self.close)
@@ -100,6 +106,23 @@ class ProfileDetailDialog(QDialog):
 
         outer.addWidget(right, 2)
 
+    def _current_url(self) -> str:
+        if not self._results:
+            return ""
+        info = self._results[self._index]
+        return str(info.get("profile_url") or info.get("website") or "").strip()
+
+    def _copy_url(self):
+        url = self._current_url()
+        if url:
+            QApplication.clipboard().setText(url)
+            self._btn_copy.setText("복사됨 ✓")
+
+    def _open_url(self):
+        url = self._current_url()
+        if url:
+            QDesktopServices.openUrl(QUrl(url))
+
     # ── 렌더링 / 네비게이션 ────────────────────────────────────────────────────
     def _render(self):
         if not self._results:
@@ -107,6 +130,8 @@ class ProfileDetailDialog(QDialog):
             self._pos_label.setText("")
             self._btn_prev.setEnabled(False)
             self._btn_next.setEnabled(False)
+            self._btn_copy.setEnabled(False)
+            self._btn_open.setEnabled(False)
             return
         info = self._results[self._index]
         username = info.get("username", "")
@@ -115,6 +140,12 @@ class ProfileDetailDialog(QDialog):
         self._pos_label.setText(f"{self._index + 1} / {len(self._results)}")
         self._btn_prev.setEnabled(self._index > 0)
         self._btn_next.setEnabled(self._index < len(self._results) - 1)
+
+        # URL 버튼: 프로필 URL(없으면 웹사이트)이 있을 때만 활성. 항목 바뀌면 라벨 초기화.
+        has_url = bool(self._current_url())
+        self._btn_copy.setText("URL 복사")
+        self._btn_copy.setEnabled(has_url)
+        self._btn_open.setEnabled(has_url)
 
         # 캡쳐 이미지
         shot = info.get("screenshot_path", "")

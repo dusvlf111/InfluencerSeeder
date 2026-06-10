@@ -282,6 +282,29 @@ class TestProfileDetailDialog:
         assert d._btn_next.isEnabled() is False
         assert d._btn_prev.isEnabled() is False
 
+    def test_url_buttons_copy_and_state(self, qapp):
+        results = [
+            {"username": "alice", "profile_url": "https://insta/alice"},
+            {"username": "bob"},  # URL 없음
+        ]
+        d = self._dlg(qapp, results, 0)
+        assert d._btn_copy.isEnabled() is True
+        assert d._btn_open.isEnabled() is True
+        d._copy_url()
+        from PyQt6.QtWidgets import QApplication
+        assert QApplication.clipboard().text() == "https://insta/alice"
+        assert d._btn_copy.text() == "복사됨 ✓"
+        # URL 없는 항목으로 이동 → 버튼 비활성 + 라벨 초기화
+        d._next()
+        assert d._btn_copy.isEnabled() is False
+        assert d._btn_open.isEnabled() is False
+        assert d._btn_copy.text() == "URL 복사"
+
+    def test_profile_url_not_shown_as_field(self, qapp):
+        # 프로필 URL 은 텍스트 필드로 노출하지 않는다(버튼으로만).
+        from ui.dialogs.profile_detail_dialog import _FIELDS
+        assert "profile_url" not in [key for _, key in _FIELDS]
+
 
 class TestResultsPanelDetailButton:
     @pytest.fixture
@@ -289,12 +312,24 @@ class TestResultsPanelDetailButton:
         from ui.panels.results_panel import ResultsPanel
         return ResultsPanel()
 
-    def test_detail_column_has_button(self, panel):
+    def test_detail_cell_is_open_text(self, panel):
         panel.add_result({"username": "alice", "followers": "10"})
-        from PyQt6.QtWidgets import QPushButton
-        w = panel._table.cellWidget(0, 7)
-        assert isinstance(w, QPushButton)
-        assert w.text() == "상세"
+        # '상세'(col 6)는 버튼이 아니라 '열기' 글자 셀, 클릭 시 상세창.
+        assert panel._table.cellWidget(0, 6) is None
+        assert panel._table.item(0, 6).text() == "열기"
+
+    def test_cell_click_opens_detail(self, panel):
+        panel.add_result({"username": "alice", "followers": "10"})
+        panel.add_result({"username": "bob", "followers": "20"})
+        panel._on_cell_clicked(1, 6)   # 상세 컬럼 클릭
+        assert panel._detail_dialog is not None
+        assert "bob" in panel._detail_dialog._title.text()
+        panel._detail_dialog.close()
+
+    def test_cell_click_other_column_no_dialog(self, panel):
+        panel.add_result({"username": "alice", "followers": "10"})
+        panel._on_cell_clicked(0, 2)   # 팔로워 컬럼 → 상세창 안 뜸
+        assert panel._detail_dialog is None
 
     def test_open_detail_creates_dialog(self, panel):
         panel.add_result({"username": "alice", "followers": "10"})
