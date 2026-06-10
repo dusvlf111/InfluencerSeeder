@@ -274,16 +274,17 @@ class ExtractProfile(Step):
 
 
 class ApplyFilters(Step):
-    """Dedup + follower-range filter. On a filter miss the username is marked
-    seen (§6) and SKIP_POST is returned. Reads ``ctx.profile_info``."""
+    """Follower-range filter (§2.5). On a filter miss the username is marked
+    seen (§6) and SKIP_POST is returned. Reads ``ctx.profile_info``.
+
+    The dedup gate (``_should_skip``) is handled by the Flow directly so it can
+    preserve the original post-back-off timing for duplicate vs. filter cases.
+    """
 
     def execute(self, ctx) -> Outcome:
         t = ctx.thread
         info = ctx.profile_info
         username = info["username"]
-
-        if t._should_skip(username):
-            return Outcome.SKIP_POST
 
         if t.min_followers > 0 or t.max_followers > 0:
             f_num = parse_followers(info.get("followers", ""))

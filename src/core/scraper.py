@@ -545,6 +545,13 @@ class ScraperThread(QThread):
     # ── Main run loop ─────────────────────────────────────────────────────────
 
     def run(self):
+        """Infrastructure shell: launch browser, wait for login, build the seen
+        set, then delegate the collection policy to a pluggable Flow (§flows).
+
+        The per-mode orchestration (tag/post loops, dedup/filter/save) lives in
+        ``core.flows`` — see ``get_flow(self.mode)``."""
+        from core.flows import get_flow, ScrapeContext
+
         driver = None
         try:
             self._log("[browser] launching Chrome...")
@@ -567,7 +574,6 @@ class ScraperThread(QThread):
 
             # Build excluded set (UI list + CSV file)
             from core import storage
-            from core.storage import append_result
             excluded: set[str] = (
                 {self._norm_username(u) for u in self.excluded_set}
                 | {u.lower() for u in storage.load_excluded()}
@@ -582,170 +588,18 @@ class ScraperThread(QThread):
                 self._log("[blocked] 차단 감지 - 일시정지")
                 return
 
-            keyword   = self.search_term.lstrip("#")
-            collected = self._collected
+            # Delegate the collection policy to the registered Flow for this
+            # mode ("keyword" aliases to the hashtag flow).
+            self._blocked = False
+            flow = get_flow(self.mode)
+            flow.run(ScrapeContext(thread=self, driver=driver))
 
-            for tag_index in range(self._start_tag_index, self.max_tags):
-                if self._stop or collected >= self.count:
-                    break
+            # A mid-run block aborts without clearing resume state (§5/§7);
+            # the flow already emitted blocked_signal + saved state.
+            if self._blocked:
+                return
 
-                # Always start from home page for search icon
-                if "instagram.com" not in driver.current_url:
-                    driver.get("https://www.instagram.com/")
-                    time.sleep(2)
-
-                # --- Step 1 ---
-                self._step(f"Step 1/6 — Clicking search icon  (tag {tag_index + 1}/{self.max_tags})")
-                try:
-                    self._step1_click_search_icon(driver)
-                except Exception as exc:
-                    self._log(f"  [step1-err] {exc}")
-                    break
-                self._random_delay("step1")
-
-                # --- Step 2 ---
-                self._step(f"Step 2/6 — Typing #{keyword}")
-                try:
-                    self._step2_type_search(driver, keyword)
-                except Exception as exc:
-                    self._log(f"  [step2-err] {exc}")
-                    break
-                self._random_delay("step2")
-
-                # --- Step 3 ---
-                self._step(f"Step 3/6 — Selecting tag suggestion #{tag_index + 1}")
-                ok = self._step3_click_tag_suggestion(driver, tag_index)
-                if not ok:
-                    self._log(f"  [stop] no tag suggestion at index {tag_index}")
-                    break
-                self._random_delay("step3")
-
-                if self._is_blocked(driver):
-                    self.blocked_signal.emit()
-                    self._log("[blocked] 차단 감지 - 일시정지")
-                    self._save_state(tag_index, 0)
-                    return
-
-                tag_grid_url = driver.current_url
-                self._log(f"[grid] {tag_grid_url}")
-
-                # --- Step 4 (collect URLs) ---
-                self._step(f"Step 4/6 — Collecting post URLs from tag grid")
-                post_urls = self._step4_collect_post_urls(driver, self.posts_per_tag)
-
-                # Resume support: skip already-processed posts within the
-                # resumed tag only (§7).
-                resume_post_start = (
-                    self._start_post_index if tag_index == self._start_tag_index else 0
-                )
-
-                for post_idx, post_url in enumerate(post_urls):
-                    if self._stop or collected >= self.count:
-                        break
-                    if post_idx < resume_post_start:
-                        continue
-
-                    # --- Step 4 (navigate to post) ---
-                    self._step(
-                        f"Step 4/6 — Opening post {post_idx + 1}/{len(post_urls)}"
-                        f"  (tag {tag_index + 1})"
-                    )
-                    self._log(f"[4] {post_url}")
-                    try:
-                        driver.get(post_url)
-                    except Exception as exc:
-                        self._log(f"  [4-err] {exc}")
-                        continue
-                    self._random_delay("step4")
-
-                    # --- Early dedup gate (§6): peek username before Step5 ---
-                    peeked = self._peek_username_from_post(driver)
-                    if peeked and self._should_skip(peeked):
-                        driver.get(tag_grid_url)
-                        time.sleep(1.0)
-                        continue
-
-                    # --- Step 5 ---
-                    self._step("Step 5/6 — Navigating to profile")
-                    profile_url = self._step5_navigate_to_profile(driver)
-                    if not profile_url:
-                        self._log("  [skip] no profile link found")
-                        driver.get(tag_grid_url)
-                        time.sleep(1.5)
-                        continue
-                    self._random_delay("step5")
-
-                    # --- Step 6 ---
-                    self._step("Step 6/6 — Saving profile data")
-                    info = self._step6_extract_profile(driver)
-
-                    if not info or not info.get("username"):
-                        self._log("  [skip] could not extract username")
-                        driver.get(tag_grid_url)
-                        time.sleep(1.5)
-                        continue
-
-                    username = info["username"]
-
-                    # Dedup gate (covers excluded + already-collected + seen).
-                    if self._should_skip(username):
-                        driver.get(tag_grid_url)
-                        time.sleep(1.0)
-                        continue
-
-                    # Follower filter (filter-failed usernames are marked seen
-                    # to prevent re-visiting, §6).
-                    if self.min_followers > 0 or self.max_followers > 0:
-                        f_num = parse_followers(info.get("followers", ""))
-                        if self.min_followers > 0 and f_num < self.min_followers:
-                            self._log(
-                                f"  [filter] @{username} {f_num:,} < min {self.min_followers:,}"
-                            )
-                            self._seen.add(self._norm_username(username))
-                            driver.get(tag_grid_url)
-                            continue
-                        if self.max_followers > 0 and f_num > self.max_followers:
-                            self._log(
-                                f"  [filter] @{username} {f_num:,} > max {self.max_followers:,}"
-                            )
-                            self._seen.add(self._norm_username(username))
-                            driver.get(tag_grid_url)
-                            continue
-
-                    self._seen.add(self._norm_username(username))
-                    info["source_post_url"] = post_url
-                    info["post_url"]        = post_url
-                    info["profile_url"]     = profile_url
-                    info["source_tag"]      = keyword
-                    info["collected_at"]    = (
-                        datetime.datetime.now().astimezone().isoformat(timespec="seconds")
-                    )
-
-                    appended = append_result(info)
-                    if not appended:
-                        self._log(f"  [skip] @{username} duplicate (not counted)")
-                        driver.get(tag_grid_url)
-                        time.sleep(1.0)
-                        continue
-
-                    self.result_signal.emit(info)
-                    collected += 1
-                    self._collected = collected
-                    self.progress_signal.emit(collected, self.count)
-                    self._log(
-                        f"[OK] @{username}  "
-                        f"followers={info.get('followers', '?')}  "
-                        f"[{collected}/{self.count}]"
-                    )
-                    self._save_state(tag_index, post_idx + 1)
-                    self._random_delay("step6")
-
-                    # Back to tag grid
-                    self._step("Returning to tag grid...")
-                    driver.get(tag_grid_url)
-                    self._random_delay("back")
-
-            self._log(f"[done] collected {collected} accounts")
+            self._log(f"[done] collected {self._collected} accounts")
             # Normal completion → clear resume state (§7).
             try:
                 storage.clear_state()

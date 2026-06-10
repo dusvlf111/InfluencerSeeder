@@ -124,13 +124,13 @@ core/
         - [x] R1.4.T1 `pytest tests/ -v` → 124 passed (run() 아직 미전환이면 step 클래스만 추가된 상태로 통과).
         - [x] R1.4 커밋: `feat(flows): reusable Step implementations for the 6-step pipeline`
 
-    - [ ] R1.5 `HashtagFlow` 구현 + `run()` 위임 전환
+    - [x] R1.5 `HashtagFlow` 구현 + `run()` 위임 전환
         **작업 상세:** `core/flows/hashtag.py` 에 `class HashtagFlow(Flow)`: `mode="hashtag"`. `run(ctx)` 가 현재 `core/scraper.py:run()` 의 **태그 루프 + 게시물 루프**(resume 인덱스, 조기 skip 게이트, 차단 감지, step별 save_state, dedup/필터/저장)를 steps 로 조립해 수행.
         `core/scraper.py:run()` 은 **인프라만 유지**: 브라우저 기동(`init_driver(self._web)`), 로그인 대기 루프, `self._seen` 통합 구성(results∪excluded∪resume), 최초 `_is_blocked` 체크, `flow = get_flow(self.mode); flow.run(ScrapeContext(thread=self, driver=driver))`, 정상 완료 시 `storage.clear_state()`, `finally` 에서 `driver.quit()` + `done_signal`. 예외 시 `error_signal`.
         `self.mode` 가 `"keyword"` 여도 현재는 HashtagFlow 로 동작(별칭 등록).
-        - [ ] R1.5.T1 `tests/test_flows.py` 에 `class TestHashtagFlowSmoke` 추가: 완전 Mock 한 `ScraperThread`(또는 `__new__` + 필요한 역량 메서드를 MagicMock/실제 혼합)와 MagicMock driver 로 `HashtagFlow().run(ctx)` 호출 시 — 게시물 0개면 즉시 정상 종료, 1개 정상 프로필이면 `append_result`(patch)·`result_signal`(MagicMock) 호출됨, dedup 대상이면 skip. (네트워크 없이 Mock 만.)
-        - [ ] R1.5.T2 `pytest tests/ -v` 전체 통과(124 + 신규 flow 테스트). 실패 시 원인 수정.
-        - [ ] R1.5 커밋: `refactor(scraper): delegate run() to pluggable HashtagFlow`
+        - [x] R1.5.T1 `tests/test_flows.py` 에 `class TestHashtagFlowSmoke` 추가: 완전 Mock 한 `ScraperThread`(또는 `__new__` + 필요한 역량 메서드를 MagicMock/실제 혼합)와 MagicMock driver 로 `HashtagFlow().run(ctx)` 호출 시 — 게시물 0개면 즉시 정상 종료, 1개 정상 프로필이면 `append_result`(patch)·`result_signal`(MagicMock) 호출됨, dedup 대상이면 skip. (네트워크 없이 Mock 만.)
+        - [x] R1.5.T2 `pytest tests/ -v` 전체 통과(124 + 신규 flow 테스트). 실패 시 원인 수정.
+        - [x] R1.5 커밋: `refactor(scraper): delegate run() to pluggable HashtagFlow`
 
     - [ ] R1.6 정리 + 문서화
         **작업 상세:** `core/scraper.py` 에 남은 죽은 코드(이전된 `_step*` 잔재 등) 제거. 최종 `wc -l core/scraper.py core/scraper_driver.py core/scraper_parsing.py core/flows/*.py` 로 길이 확인(scraper.py 목표 ≤ ~450줄). `src/CLAUDE.md` 의 "디렉토리 구조"·"진행 중 작업" 절에 flows/ 추상화와 "새 플로우 추가법(= Flow 서브클래스 + register)"을 2~4줄 추가.
