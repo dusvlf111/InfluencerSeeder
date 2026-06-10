@@ -1,0 +1,125 @@
+"""Chrome driver construction + stealth fingerprinting (§4/§5).
+
+Extracted from scraper.py. ``random`` is imported at module level so the
+``patch("core.scraper.random.choice", ...)`` contract keeps working (random is
+a singleton — patching it on any importing module affects the shared object).
+``core.scraper`` re-exports everything here.
+"""
+
+import random
+
+
+# Desktop Chrome user-agent pool for fingerprint randomization (§5).
+_UA_POOL = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+]
+
+# Window-size presets for fingerprint randomization (§5).
+_WINDOW_PRESETS = [(1280, 900), (1440, 900), (1366, 768), (1536, 864)]
+
+
+def _truthy(value) -> bool:
+    """Interpret CSV-loaded values ('true'/'True'/True) as bool."""
+    return str(value).strip().lower() == "true"
+
+
+def _build_chrome_options(web: dict | None = None):
+    """Construct Chrome Options honoring web.csv stealth toggles (§4/§5)."""
+    from selenium.webdriver.chrome.options import Options
+    web = web or {}
+    options = Options()
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+
+    if _truthy(web.get("headless")):
+        options.add_argument("--headless=new")
+
+    if _truthy(web.get("randomize_user_agent")):
+        ua = random.choice(_UA_POOL)
+        options.add_argument(f"--user-agent={ua}")
+
+    if _truthy(web.get("randomize_window")):
+        w, h = random.choice(_WINDOW_PRESETS)
+        options.add_argument(f"--window-size={w},{h}")
+    else:
+        ww = web.get("window_width")
+        wh = web.get("window_height")
+        try:
+            w = int(ww) if str(ww).strip() != "" else 1280
+            h = int(wh) if str(wh).strip() != "" else 900
+        except (TypeError, ValueError):
+            w, h = 1280, 900
+        if w > 0 and h > 0:
+            options.add_argument(f"--window-size={w},{h}")
+        else:
+            # 0 means randomize per §2.1.
+            w, h = random.choice(_WINDOW_PRESETS)
+            options.add_argument(f"--window-size={w},{h}")
+
+    user_data_dir = (web.get("user_data_dir") or "").strip() if isinstance(web.get("user_data_dir"), str) else web.get("user_data_dir")
+    if user_data_dir:
+        options.add_argument(f"--user-data-dir={user_data_dir}")
+
+    return options
+
+
+def _apply_stealth(driver):
+    """Inject scripts to mask automation fingerprints (§5)."""
+    try:
+        driver.execute_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        )
+    except Exception:
+        pass
+    try:
+        driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {
+                "source": "Object.defineProperty(navigator, 'webdriver', "
+                          "{get: () => undefined})"
+            },
+        )
+    except Exception:
+        pass
+    return driver
+
+
+def init_driver(web: dict | None = None):
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from webdriver_manager.chrome import ChromeDriverManager
+
+    if web is None:
+        from core.storage import load_web
+        web = load_web()
+
+    options = _build_chrome_options(web)
+
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=options,
+    )
+    try:
+        pl_timeout = int(web.get("page_load_timeout") or 30)
+        driver.set_page_load_timeout(pl_timeout)
+    except Exception:
+        pass
+    try:
+        iw = int(web.get("implicit_wait") or 0)
+        if iw > 0:
+            driver.implicitly_wait(iw)
+    except Exception:
+        pass
+    _apply_stealth(driver)
+    return driver

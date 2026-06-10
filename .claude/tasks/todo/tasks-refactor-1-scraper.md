@@ -83,12 +83,12 @@ core/
         - [x] R1.1.T1 `cd src && .venv/bin/pytest tests/ -v` → **124 passed** 확인 (특히 `TestParseFollowers`, `TestScraperThreadPassesFollowerFilter`).
         - [x] R1.1 커밋: `refactor(scraper): extract parsing helpers to scraper_parsing.py`
 
-    - [ ] R1.2 `scraper_driver.py` 추출
+    - [x] R1.2 `scraper_driver.py` 추출
         **작업 상세:** `_truthy, _UA_POOL, _WINDOW_PRESETS, _build_chrome_options, _apply_stealth, init_driver` 를 `core/scraper_driver.py` 로 이동.
         `core/scraper.py` 에서 `from core.scraper_driver import (init_driver, _build_chrome_options, _apply_stealth, _UA_POOL, _WINDOW_PRESETS, _truthy)` re-export.
         ⚠️ `scraper_driver.py` 는 `import random` 유지(계약 3, 싱글톤). `init_driver` 의 `from core.storage import load_web` 지연 import 유지.
-        - [ ] R1.2.T1 `pytest tests/ -v` → 124 passed (특히 `TestStealth` 10개, import 라인).
-        - [ ] R1.2 커밋: `refactor(scraper): extract driver/stealth to scraper_driver.py`
+        - [x] R1.2.T1 `pytest tests/ -v` → 124 passed (특히 `TestStealth` 10개, import 라인).
+        - [x] R1.2 커밋: `refactor(scraper): extract driver/stealth to scraper_driver.py`
 
     - [ ] R1.3 `flows/` 추상화 골격 (base + context + 레지스트리)
         **작업 상세:**
