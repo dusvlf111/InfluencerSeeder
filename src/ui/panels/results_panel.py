@@ -1,0 +1,222 @@
+from pathlib import Path
+
+from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QPushButton, QProgressBar, QTextEdit,
+    QTableWidget, QTableWidgetItem, QTabWidget,
+    QGroupBox, QHeaderView, QAbstractItemView,
+    QFileDialog, QMessageBox,
+)
+
+from design.tokens import Colors as C
+import core.storage as storage
+
+
+class ResultsPanel(QWidget):
+    """Right panel — progress, results table, log."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._results: list[dict] = []
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(12, 16, 16, 16)
+
+        # Progress group
+        pg_box = QGroupBox("Progress")
+        pb_layout = QVBoxLayout(pg_box)
+        pb_layout.setSpacing(4)
+        self._step_label = QLabel("Waiting to start")
+        self._step_label.setObjectName("labelMuted")
+        pb_layout.addWidget(self._step_label)
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setValue(0)
+        pb_layout.addWidget(self._progress_bar)
+        layout.addWidget(pg_box)
+
+        # Tabs
+        self._tabs = QTabWidget()
+        self._tabs.addTab(self._build_results_tab(), "Results")
+        self._tabs.addTab(self._build_log_tab(), "Log")
+        layout.addWidget(self._tabs)
+
+    def _build_results_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        toolbar = QHBoxLayout()
+        self._count_label = QLabel("0 collected")
+        self._count_label.setObjectName("labelMuted")
+        btn_import = QPushButton("Import CSV")
+        btn_import.clicked.connect(self._import_csv)
+        btn_export = QPushButton("Export CSV")
+        btn_export.clicked.connect(self._export_csv)
+        toolbar.addWidget(self._count_label)
+        toolbar.addStretch()
+        toolbar.addWidget(btn_import)
+        toolbar.addWidget(btn_export)
+        layout.addLayout(toolbar)
+
+        self._table = QTableWidget(0, 6)
+        self._table.setHorizontalHeaderLabels(
+            ["#", "Username", "Followers", "Bio", "Website", "Post"]
+        )
+        self._table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.verticalHeader().setVisible(False)
+        self._table.setColumnWidth(0, 36)
+        self._table.setColumnWidth(2, 80)
+        self._table.setColumnWidth(5, 60)
+        self._table.cellDoubleClicked.connect(self._on_cell_double_clicked)
+        layout.addWidget(self._table)
+        return tab
+
+    def _build_log_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        self._log_text = QTextEdit()
+        self._log_text.setReadOnly(True)
+        layout.addWidget(self._log_text)
+        return tab
+
+    # ── Public API ────────────────────────────────────────────────────────────
+
+    def append_log(self, msg: str):
+        if msg.startswith("[OK]"):
+            color = C.green
+        elif any(x in msg for x in ("[ERROR]", "[에러]", "[오류]")):
+            color = C.red
+        elif msg.startswith("[wait]"):
+            color = C.amber
+        elif msg.startswith("[step]"):
+            color = C.accent_light
+        else:
+            color = C.muted2
+        safe = msg.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        self._log_text.append(f'<span style="color:{color}">{safe}</span>')
+
+    def update_progress(self, current: int, total: int):
+        self._progress_bar.setMaximum(total)
+        self._progress_bar.setValue(current)
+
+    def set_status(self, text: str):
+        self._step_label.setText(text)
+
+    def add_result(self, info: dict):
+        self._results.append(info)
+        self._add_table_row(info)
+        self._count_label.setText(f"{len(self._results)} collected")
+
+    def _add_table_row(self, info: dict):
+        row = self._table.rowCount()
+        self._table.insertRow(row)
+
+        self._table.setItem(row, 0, QTableWidgetItem(str(row + 1)))
+
+        username = info.get("username") or info.get("account", "").lstrip("@")
+        user_item = QTableWidgetItem("@" + username if username else "")
+        user_item.setForeground(Qt.GlobalColor.white)
+        user_item.setData(Qt.ItemDataRole.UserRole, info.get("profile_url", ""))
+        self._table.setItem(row, 1, user_item)
+
+        self._table.setItem(row, 2, QTableWidgetItem(info.get("followers", "")))
+
+        bio = info.get("bio", "")
+        self._table.setItem(row, 3, QTableWidgetItem(bio[:80] if bio else ""))
+
+        site_item = QTableWidgetItem(info.get("website", ""))
+        site_item.setData(Qt.ItemDataRole.UserRole + 1, info.get("website", ""))
+        self._table.setItem(row, 4, site_item)
+
+        link_item = QTableWidgetItem("Open")
+        link_item.setForeground(Qt.GlobalColor.cyan)
+        link_item.setData(Qt.ItemDataRole.UserRole, info.get("post_url", ""))
+        self._table.setItem(row, 5, link_item)
+
+    def reset(self):
+        self._results = []
+        self._table.setRowCount(0)
+        self._count_label.setText("0 collected")
+        self._log_text.clear()
+        self._progress_bar.setValue(0)
+        self._step_label.setText("Waiting to start")
+
+    def show_log_tab(self):
+        self._tabs.setCurrentIndex(1)
+
+    def show_results_tab(self):
+        self._tabs.setCurrentIndex(0)
+
+    # ── Cell interactions ─────────────────────────────────────────────────────
+
+    def _on_cell_double_clicked(self, row: int, col: int):
+        if col == 5:
+            url = self._table.item(row, 5).data(Qt.ItemDataRole.UserRole)
+            if url:
+                QDesktopServices.openUrl(QUrl(url))
+        elif col == 1:
+            url = self._table.item(row, 1).data(Qt.ItemDataRole.UserRole)
+            if url:
+                QDesktopServices.openUrl(QUrl(url))
+        elif col == 4:
+            url = self._table.item(row, 4).data(Qt.ItemDataRole.UserRole + 1)
+            if url:
+                QDesktopServices.openUrl(QUrl(url))
+
+    # ── Import / Export ───────────────────────────────────────────────────────
+
+    def _import_csv(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import CSV", "", "CSV Files (*.csv)"
+        )
+        if not path:
+            return
+        try:
+            import csv
+            loaded = []
+            with open(path, newline="", encoding="utf-8-sig") as f:
+                for row in csv.DictReader(f):
+                    loaded.append(dict(row))
+            if not loaded:
+                QMessageBox.information(self, "Info", "No data found in file.")
+                return
+            for info in loaded:
+                self._results.append(info)
+                self._add_table_row(info)
+            self._count_label.setText(f"{len(self._results)} collected")
+            QMessageBox.information(self, "Done", f"Imported {len(loaded)} rows.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", str(exc))
+
+    def _export_csv(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export CSV", "results.csv", "CSV Files (*.csv)"
+        )
+        if not path:
+            return
+        try:
+            # Try to copy the live results.csv first (fastest, preserves all fields)
+            storage.export_results(path)
+            QMessageBox.information(self, "Done", f"Saved: {path}")
+            return
+        except FileNotFoundError:
+            pass
+        # Fallback: write from in-memory results
+        if not self._results:
+            QMessageBox.information(self, "Info", "No results to export.")
+            return
+        import csv
+        fieldnames = list(self._results[0].keys())
+        with open(path, "w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(self._results)
+        QMessageBox.information(self, "Done", f"Saved: {path}")
