@@ -194,6 +194,18 @@ class TestSyncControlPanelAndSettings:
         assert set(window._control.excluded_widget.accounts) == {"bot"}
 
 
+class TestEmbeddedTargetFilterInit:
+    def test_init_stores_target_filters(self, qapp):
+        from core.embedded_scraper import EmbeddedScraper
+        s = EmbeddedScraper(
+            MagicMock(),
+            target={"min_following": 5, "max_following": 500, "min_posts": 30},
+        )
+        assert s.min_following == 5
+        assert s.max_following == 500
+        assert s.min_posts == 30
+
+
 # ── 4.4 Blocked + Skip ───────────────────────────────────────────────────────
 
 class TestBlockedAndSkip:

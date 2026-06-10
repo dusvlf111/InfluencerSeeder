@@ -61,6 +61,53 @@ class TestJsBuilders:
         assert "for (var i = 0; i < cands.length; i++)" in js
 
 
+class TestTargetRejectReason:
+    """target.csv §2.5 필터(팔로워/팔로잉/게시물)가 수집 단계에서 적용되는지."""
+
+    def _scraper(self, **attrs):
+        from core.embedded_scraper import EmbeddedScraper
+        s = EmbeddedScraper.__new__(EmbeddedScraper)   # __init__ 우회
+        s.min_followers = s.max_followers = 0
+        s.min_following = s.max_following = 0
+        s.min_posts = 0
+        for k, v in attrs.items():
+            setattr(s, k, v)
+        return s
+
+    def test_passes_when_no_limits(self):
+        s = self._scraper()
+        assert s._target_reject_reason({"followers": "1000"}) == ""
+
+    def test_followers_below_min(self):
+        s = self._scraper(min_followers=5000)
+        assert "팔로워" in s._target_reject_reason({"followers": "1,000"})
+
+    def test_followers_above_max(self):
+        s = self._scraper(max_followers=10000)
+        assert "팔로워" in s._target_reject_reason({"followers": "16.7만"})
+
+    def test_following_above_max(self):
+        s = self._scraper(max_following=100)
+        reason = s._target_reject_reason({"followers": "5000", "following": "500"})
+        assert "팔로잉" in reason
+
+    def test_following_below_min(self):
+        s = self._scraper(min_following=50)
+        reason = s._target_reject_reason({"followers": "5000", "following": "10"})
+        assert "팔로잉" in reason
+
+    def test_min_posts_insufficient(self):
+        s = self._scraper(min_posts=100)
+        reason = s._target_reject_reason({"followers": "5000", "posts_count": "10"})
+        assert "게시물" in reason
+
+    def test_all_within_range_passes(self):
+        s = self._scraper(min_followers=1000, max_followers=100000,
+                          max_following=1000, min_posts=10)
+        info = {"followers": "5,000", "following": "100", "posts_count": "2,614"}
+        assert s._target_reject_reason(info) == ""
+
+
 class TestCleanNum:
     def test_extracts_first_number(self):
         assert _clean_num("팔로워 3,632명") == "3,632"

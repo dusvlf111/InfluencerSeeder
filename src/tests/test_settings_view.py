@@ -113,6 +113,29 @@ class TestSaveAll:
         view._save_all()
         assert fired == [True]
 
+    def test_confirm_save_yes_persists(self, view, monkeypatch):
+        from PyQt6.QtWidgets import QMessageBox
+        view.load()
+        view._fl_posts_per_tag.setValue(33)
+        monkeypatch.setattr(
+            QMessageBox, "question",
+            lambda *a, **k: QMessageBox.StandardButton.Yes,
+        )
+        view._confirm_save()
+        assert int(storage.load_flow()["posts_per_tag"]) == 33
+
+    def test_confirm_save_no_discards(self, view, monkeypatch):
+        from PyQt6.QtWidgets import QMessageBox
+        view.load()
+        view._fl_posts_per_tag.setValue(99)
+        monkeypatch.setattr(
+            QMessageBox, "question",
+            lambda *a, **k: QMessageBox.StandardButton.No,
+        )
+        view._confirm_save()
+        # [아니오] → 저장 안 됨(디스크는 기본값/이전값 유지)
+        assert int(storage.load_flow()["posts_per_tag"]) != 99
+
     def test_round_trip_target(self, view):
         view.load()
         view._t_min_followers.setValue(5000)

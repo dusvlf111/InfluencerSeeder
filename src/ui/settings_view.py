@@ -89,7 +89,7 @@ class SettingsView(
 
         btn_save = QPushButton("Save All")
         btn_save.setObjectName("btnPrimary")
-        btn_save.clicked.connect(self._save_all)
+        btn_save.clicked.connect(self._confirm_save)
         hl.addWidget(btn_save)
 
         root.addWidget(header)
@@ -112,6 +112,16 @@ class SettingsView(
         self._populate_excluded(self._excluded)
 
     # ── Actions ───────────────────────────────────────────────────────────────
+
+    def _confirm_save(self):
+        """[Save All] 클릭 시 저장 확인 모달 → [예]일 때만 실제 저장."""
+        reply = QMessageBox.question(
+            self, "설정 저장", "변경한 설정을 저장하시겠습니까?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._save_all()
 
     def _save_all(self):
         try:
