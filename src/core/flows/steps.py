@@ -14,6 +14,34 @@ from core.flows.base import Step, Outcome
 from core.scraper_parsing import parse_followers, _BLACKLISTED_PATHS
 
 
+# ── Multi-keyword parsing (260610 Fix-1) ────────────────────────────────────────
+
+def parse_keywords(search_term):
+    """Split ``search_term`` into individual keywords.
+
+    ``'인턴, 취준생\n개발자'`` → ``['인턴', '취준생', '개발자']`` — splits on commas
+    and newlines, strips whitespace and a leading ``#``, drops empties and
+    case-insensitive duplicates (preserving first-seen order). Always returns at
+    least ``['']`` so the caller still runs one (empty) search."""
+    out, seen = [], set()
+    for raw in re.split(r"[,\n]", search_term or ""):
+        k = raw.strip().lstrip("#").strip()
+        if k and k.lower() not in seen:
+            seen.add(k.lower())
+            out.append(k)
+    return out or [""]
+
+
+def keyword_tag_plan(search_term, max_tags=1):
+    """Build the (keyword, suggestion_index) plan for the tag loop.
+
+    Each keyword maps to exactly one tag — the first suggestion (index 0). The
+    plan length is the number of distinct keywords; ``max_tags`` is accepted for
+    backward compatibility but no longer caps the loop (the overall cap is the
+    collection ``count``)."""
+    return [(kw, 0) for kw in parse_keywords(search_term)]
+
+
 def click_coord(driver, thread, coord):
     """Click at an absolute (x, y) pixel coordinate via ActionChains."""
     x, y = coord
@@ -457,7 +485,9 @@ class SaveResult(Step):
             f"followers={info.get('followers', '?')}  "
             f"[{ctx.collected}/{t.count}]"
         )
-        t._save_state(ctx.tag_index, ctx.post_index + 1)
+        # Persist resume progress against the plan/keyword cursor (not the
+        # suggestion index, which is 0 per keyword in the multi-keyword plan).
+        t._save_state(getattr(ctx, "plan_index", ctx.tag_index), ctx.post_index + 1)
         return Outcome.CONTINUE
 
 

@@ -35,6 +35,7 @@ from core.flows.steps import (
     OpenHomeIfNeeded,
     GoBackStep,
     ScrollStep,
+    keyword_tag_plan,
 )
 
 _log = logging.getLogger(__name__)
@@ -125,8 +126,11 @@ class ConfigurableFlow(Flow):
 
         pre_loop, per_tag, per_post = plan
         driver = ctx.driver
-        keyword = t.search_term.lstrip("#")
-        ctx.keyword = keyword
+
+        # Multi-keyword plan: each comma/newline keyword is one tag (suggestion
+        # index 0). ``plan_idx`` is the loop/resume cursor; the suggestion index
+        # to click lives in ``ctx.tag_index`` (kept separate per A.2).
+        kw_plan = keyword_tag_plan(t.search_term, t.max_tags)
 
         # pre_loop steps run once before the tag loop.
         for row in pre_loop:
@@ -135,18 +139,23 @@ class ConfigurableFlow(Flow):
         # Step-number labels mirror the original "Step N/6 — ..." messages so the
         # status bar / logs stay identical for the default flow.
         n_total = 6
+        n_plan = len(kw_plan)
 
-        for tag_index in range(t._start_tag_index, t.max_tags):
+        for plan_idx in range(t._start_tag_index, n_plan):
             if t._stop or t._collected >= t.count:
                 break
-            ctx.tag_index = tag_index
+            keyword, sugg_idx = kw_plan[plan_idx]
+            ctx.keyword = keyword
+            ctx.tag_index = sugg_idx            # suggestion to click (0 per keyword)
+            ctx.plan_index = plan_idx           # plan/resume cursor (state save)
+            t._current_plan_index = plan_idx
 
             # Always start from home page for the search icon (original inline guard).
             if "instagram.com" not in driver.current_url:
                 driver.get("https://www.instagram.com/")
                 time.sleep(2)
 
-            if not self._run_per_tag(ctx, per_tag, per_post, tag_index, n_total):
+            if not self._run_per_tag(ctx, per_tag, per_post, plan_idx, n_plan):
                 # _run_per_tag returns False to break the whole tag loop
                 # (no suggestion / step error / blocked).
                 if getattr(t, "_blocked", False):
@@ -155,14 +164,18 @@ class ConfigurableFlow(Flow):
 
     # ── per_tag phase ─────────────────────────────────────────────────────────
 
-    def _run_per_tag(self, ctx, per_tag, per_post, tag_index, n_total) -> bool:
+    def _run_per_tag(self, ctx, per_tag, per_post, plan_idx, n_plan) -> bool:
         """Run the per_tag steps up to ``collect_open``, then the per_post loop.
+
+        ``plan_idx`` is the keyword/plan cursor (resume + state messages);
+        the suggestion index to click is ``ctx.tag_index`` (kept separate).
 
         Returns True to continue to the next tag, False to break the tag loop.
         """
         t, driver = ctx.thread, ctx.driver
         keyword = ctx.keyword
         step_no = 0
+        n_total_label = 6   # status labels mirror the original "Step N/6" scheme
 
         for row in per_tag:
             action = row["action"]
@@ -173,15 +186,15 @@ class ConfigurableFlow(Flow):
                 # Step 4 (collect URLs) then drive the post loop.
                 t._step("Step 4/6 — Collecting post URLs from tag grid")
                 ACTIONS[action](ref, param).execute(ctx)
-                self._run_per_post(ctx, per_post, tag_index, n_total)
+                self._run_per_post(ctx, per_post, plan_idx, n_plan)
                 return True
 
             step_no += 1
             step = ACTIONS[action](ref, param)
 
             if action == "click":
-                t._step(f"Step {step_no}/{n_total} — Clicking search icon  "
-                        f"(tag {tag_index + 1}/{t.max_tags})")
+                t._step(f"Step {step_no}/{n_total_label} — Clicking search icon  "
+                        f"(키워드 {plan_idx + 1}/{n_plan})")
                 try:
                     step.execute(ctx)
                 except Exception as exc:
@@ -190,7 +203,7 @@ class ConfigurableFlow(Flow):
                 t._random_delay(f"step{step_no}")
 
             elif action == "type":
-                t._step(f"Step {step_no}/{n_total} — Typing #{keyword}")
+                t._step(f"Step {step_no}/{n_total_label} — '{keyword}' 검색")
                 try:
                     step.execute(ctx)
                 except Exception as exc:
@@ -199,10 +212,10 @@ class ConfigurableFlow(Flow):
                 t._random_delay(f"step{step_no}")
 
             elif action == "click_index":
-                t._step(f"Step {step_no}/{n_total} — Selecting tag suggestion #{tag_index + 1}")
+                t._step(f"Step {step_no}/{n_total_label} — '{keyword}' 검색·태그 선택")
                 outcome = step.execute(ctx)
                 if outcome is Outcome.NEXT_TAG:
-                    t._log(f"  [stop] no tag suggestion at index {tag_index}")
+                    t._log(f"  [stop] no tag suggestion for '{keyword}'")
                     return False
                 t._random_delay(f"step{step_no}")
 
@@ -211,7 +224,7 @@ class ConfigurableFlow(Flow):
                 if t._is_blocked(driver):
                     t.blocked_signal.emit()
                     t._log("[blocked] 차단 감지 - 일시정지")
-                    t._save_state(tag_index, 0)
+                    t._save_state(plan_idx, 0)
                     t._blocked = True
                     return False
                 ctx.tag_grid_url = driver.current_url
@@ -226,14 +239,14 @@ class ConfigurableFlow(Flow):
 
     # ── per_post phase ────────────────────────────────────────────────────────
 
-    def _run_per_post(self, ctx, per_post, tag_index, n_total) -> None:
+    def _run_per_post(self, ctx, per_post, plan_idx, n_plan) -> None:
         t, driver = ctx.thread, ctx.driver
         tag_grid_url = ctx.tag_grid_url
         post_urls = ctx.post_urls
 
         # Resume support: skip already-processed posts within the resumed tag.
         resume_post_start = (
-            t._start_post_index if tag_index == t._start_tag_index else 0
+            t._start_post_index if plan_idx == t._start_tag_index else 0
         )
 
         for post_idx, post_url in enumerate(post_urls):
@@ -247,7 +260,7 @@ class ConfigurableFlow(Flow):
 
             # Step 4 (navigate to post) — mirrors the original pre-peek navigate.
             t._step(f"Step 4/6 — Opening post {post_idx + 1}/{len(post_urls)}"
-                    f"  (tag {tag_index + 1})")
+                    f"  (키워드 {plan_idx + 1}/{n_plan})")
             t._log(f"[4] {post_url}")
             try:
                 driver.get(post_url)
@@ -256,7 +269,7 @@ class ConfigurableFlow(Flow):
                 continue
             t._random_delay("step4")
 
-            if self._run_post_steps(ctx, per_post, n_total, tag_grid_url) is Outcome.SKIP_POST:
+            if self._run_post_steps(ctx, per_post, 6, tag_grid_url) is Outcome.SKIP_POST:
                 continue
 
     def _run_post_steps(self, ctx, per_post, n_total, tag_grid_url) -> Outcome:

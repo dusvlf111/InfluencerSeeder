@@ -352,10 +352,21 @@ class TestResumeAndState:
         payload = save.call_args[0][0]
         assert payload["keyword"] == "인턴"
         assert payload["tag_index"] == 2
+        # keyword_index mirrors the plan cursor (Fix-1); defaults to tag_index.
+        assert payload["keyword_index"] == 2
         assert payload["post_index"] == 3
         assert payload["collected_count"] == 7
         assert sorted(payload["seen_usernames"]) == ["abc", "def"]
         assert "updated_at" in payload
+
+    def test_resume_prefers_keyword_index(self):
+        t = ScraperThread(**self._kwargs(resume_state={
+            "tag_index": 1,
+            "keyword_index": 4,
+            "post_index": 0,
+        }))
+        # keyword_index wins when present (multi-keyword plan cursor).
+        assert t._start_tag_index == 4
 
     def test_explicit_followers_not_overridden_by_target(self):
         t = ScraperThread(**self._kwargs(min_followers=3000, max_followers=4000))

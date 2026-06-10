@@ -120,11 +120,18 @@ class ScraperThread(QThread):
         self._collected        = 0
         self._seen: set[str]   = set()
         if resume_state:
-            self._start_tag_index  = int(resume_state.get("tag_index", self.tag_start_index))
+            # Prefer the keyword/plan cursor when present (multi-keyword Fix-1);
+            # fall back to the legacy tag_index key for older state files.
+            self._start_tag_index  = int(resume_state.get(
+                "keyword_index", resume_state.get("tag_index", self.tag_start_index)))
             self._start_post_index = int(resume_state.get("post_index", 0))
             self._collected        = int(resume_state.get("collected_count", 0))
             for u in resume_state.get("seen_usernames", []) or []:
                 self._seen.add(self._norm_username(u))
+
+        # Plan/keyword cursor for the multi-keyword tag loop (Fix-1). Persisted
+        # alongside the legacy ``tag_index`` so resume can restore the keyword.
+        self._current_plan_index = self._start_tag_index
 
         self._waiting_login = False
         self._stop          = False
@@ -254,6 +261,7 @@ class ScraperThread(QThread):
         state = {
             "keyword": self.search_term.lstrip("#"),
             "tag_index": int(tag_index),
+            "keyword_index": int(getattr(self, "_current_plan_index", tag_index)),
             "post_index": int(post_index),
             "collected_count": int(getattr(self, "_collected", 0)),
             "seen_usernames": sorted(getattr(self, "_seen", set())),

@@ -346,6 +346,173 @@ class TestConfigurableFlowDefault:
         assert t._collected == 0
 
 
+class TestKeywordPlan:
+    """parse_keywords / keyword_tag_plan (Fix-1 A.1)."""
+
+    def test_comma_split(self):
+        from core.flows.steps import parse_keywords
+        assert parse_keywords("인턴,취준생,개발자") == ["인턴", "취준생", "개발자"]
+
+    def test_newline_split(self):
+        from core.flows.steps import parse_keywords
+        assert parse_keywords("인턴\n취준생\n개발자") == ["인턴", "취준생", "개발자"]
+
+    def test_mixed_comma_newline_and_whitespace(self):
+        from core.flows.steps import parse_keywords
+        assert parse_keywords(" 인턴, 취준생\n 개발자 ") == ["인턴", "취준생", "개발자"]
+
+    def test_hash_stripped(self):
+        from core.flows.steps import parse_keywords
+        assert parse_keywords("#인턴, #취준생") == ["인턴", "취준생"]
+
+    def test_dedup_case_insensitive_order_preserved(self):
+        from core.flows.steps import parse_keywords
+        assert parse_keywords("Intern,intern,INTERN,dev") == ["Intern", "dev"]
+
+    def test_empty_and_blank_yields_single_empty(self):
+        from core.flows.steps import parse_keywords
+        assert parse_keywords("") == [""]
+        assert parse_keywords(None) == [""]
+        assert parse_keywords("  ,  \n ") == [""]
+
+    def test_single_keyword(self):
+        from core.flows.steps import parse_keywords
+        assert parse_keywords("인턴") == ["인턴"]
+
+    def test_plan_one_tag_per_keyword_index_zero(self):
+        from core.flows.steps import keyword_tag_plan
+        plan = keyword_tag_plan("인턴,취준생", max_tags=5)
+        assert plan == [("인턴", 0), ("취준생", 0)]
+
+    def test_plan_single_keyword(self):
+        from core.flows.steps import keyword_tag_plan
+        assert keyword_tag_plan("인턴", max_tags=3) == [("인턴", 0)]
+
+
+class TestMultiKeywordFlow:
+    """Each comma keyword is searched separately (one tag/keyword) and its posts
+    are processed in sequence — ``ctx.keyword`` tracks the active keyword."""
+
+    def _driver(self):
+        d = MagicMock()
+        d.current_url = "https://www.instagram.com/explore/tags/intern/"
+        return d
+
+    def test_two_keywords_each_searched_and_saved(self, tmp_data_dir):
+        t = _make_thread(search_term="인턴,취준생", count=10, max_tags=1)
+        driver = self._driver()
+        ctx = ScrapeContext(thread=t, driver=driver)
+
+        seen_keywords = []
+        saved_tags = []
+
+        from core.flows import steps as st
+
+        def _click(self, ctx):
+            return Outcome.CONTINUE
+
+        def _type(self, ctx):
+            return Outcome.CONTINUE
+
+        def _click_idx(self, ctx):
+            # record which keyword is active when the tag is selected
+            seen_keywords.append(ctx.keyword)
+            return Outcome.CONTINUE
+
+        def _collect(self, ctx):
+            ctx.post_urls = [f"https://www.instagram.com/p/{ctx.keyword}/"]
+            return Outcome.CONTINUE
+
+        def _peek(self, ctx):
+            return Outcome.CONTINUE
+
+        def _nav(self, ctx):
+            ctx.profile_url = f"https://www.instagram.com/{ctx.keyword}_user/"
+            return Outcome.CONTINUE
+
+        def _extract(self, ctx):
+            ctx.profile_info = {"username": f"{ctx.keyword}_user", "followers": "5천"}
+            return Outcome.CONTINUE
+
+        patches = [
+            patch.object(st.ClickStep, "execute", _click),
+            patch.object(st.TypeStep, "execute", _type),
+            patch.object(st.ClickIndexStep, "execute", _click_idx),
+            patch.object(st.CollectPostUrls, "execute", _collect),
+            patch.object(st.PeekUsernameGate, "execute", _peek),
+            patch.object(st.NavigateToProfile, "execute", _nav),
+            patch.object(st.ExtractProfile, "execute", _extract),
+        ]
+
+        def _append(info):
+            saved_tags.append(info["source_tag"])
+            return True
+
+        with patch("core.storage.append_result", side_effect=_append):
+            for p in patches:
+                p.start()
+            try:
+                ConfigurableFlow().run(ctx)
+            finally:
+                for p in patches:
+                    p.stop()
+
+        # Both keywords searched in order, one tag each.
+        assert seen_keywords == ["인턴", "취준생"]
+        # A post from each keyword was saved with the keyword as source_tag.
+        assert saved_tags == ["인턴", "취준생"]
+        assert t._collected == 2
+
+    def test_single_keyword_one_tag_only(self, tmp_data_dir):
+        # max_tags high, but single keyword → exactly one tag (no suggestion cycling).
+        t = _make_thread(search_term="인턴", count=10, max_tags=9)
+        driver = self._driver()
+        ctx = ScrapeContext(thread=t, driver=driver)
+        clicks = {"n": 0}
+
+        from core.flows import steps as st
+
+        def _noop(self, ctx):
+            return Outcome.CONTINUE
+
+        def _click_idx(self, ctx):
+            clicks["n"] += 1
+            return Outcome.CONTINUE
+
+        def _collect(self, ctx):
+            ctx.post_urls = ["https://www.instagram.com/p/abc/"]
+            return Outcome.CONTINUE
+
+        def _nav(self, ctx):
+            ctx.profile_url = "https://www.instagram.com/newuser/"
+            return Outcome.CONTINUE
+
+        def _extract(self, ctx):
+            ctx.profile_info = {"username": "newuser", "followers": "5천"}
+            return Outcome.CONTINUE
+
+        patches = [
+            patch.object(st.ClickStep, "execute", _noop),
+            patch.object(st.TypeStep, "execute", _noop),
+            patch.object(st.ClickIndexStep, "execute", _click_idx),
+            patch.object(st.CollectPostUrls, "execute", _collect),
+            patch.object(st.PeekUsernameGate, "execute", _noop),
+            patch.object(st.NavigateToProfile, "execute", _nav),
+            patch.object(st.ExtractProfile, "execute", _extract),
+        ]
+
+        with patch("core.storage.append_result", return_value=True):
+            for p in patches:
+                p.start()
+            try:
+                ConfigurableFlow().run(ctx)
+            finally:
+                for p in patches:
+                    p.stop()
+        # Only one tag selected despite max_tags=9.
+        assert clicks["n"] == 1
+
+
 class TestConfigurableFlowEditing:
     """Edited flow_steps: disabled steps skipped, unsupported actions ignored,
     empty/invalid steps fall back to HashtagFlow."""

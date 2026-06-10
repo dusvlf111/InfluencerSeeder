@@ -15,8 +15,11 @@ class ScrapeContext:
     keyword: str = ""
     tag_grid_url: str = ""
     post_urls: list = field(default_factory=list)
-    # Current loop indices (set by the Flow as it iterates).
+    # Current loop indices (set by the Flow as it iterates). ``tag_index`` is the
+    # suggestion index to click (0 per keyword); ``plan_index`` is the
+    # keyword/plan cursor used for resume + state persistence (kept separate).
     tag_index: int = 0
+    plan_index: int = 0
     post_index: int = 0
     # Per-post working values (populated by Steps within the loop).
     post_url: str = ""

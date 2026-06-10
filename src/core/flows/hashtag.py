@@ -24,6 +24,7 @@ from core.flows.steps import (
     ExtractProfile,
     ApplyFilters,
     SaveResult,
+    keyword_tag_plan,
 )
 
 
@@ -33,13 +34,21 @@ class HashtagFlow(Flow):
     def run(self, ctx) -> None:
         t = ctx.thread
         driver = ctx.driver
-        keyword = t.search_term.lstrip("#")
-        ctx.keyword = keyword
 
-        for tag_index in range(t._start_tag_index, t.max_tags):
+        # Multi-keyword plan (Fix-1): each comma/newline keyword = one tag
+        # (suggestion index 0). ``plan_idx`` is the loop/resume cursor; the
+        # suggestion index to click is ``ctx.tag_index`` (kept separate).
+        kw_plan = keyword_tag_plan(t.search_term, t.max_tags)
+        n_plan = len(kw_plan)
+
+        for plan_idx in range(t._start_tag_index, n_plan):
             if t._stop or t._collected >= t.count:
                 break
-            ctx.tag_index = tag_index
+            keyword, sugg_idx = kw_plan[plan_idx]
+            ctx.keyword = keyword
+            ctx.tag_index = sugg_idx
+            ctx.plan_index = plan_idx
+            t._current_plan_index = plan_idx
 
             # Always start from home page for search icon.
             if "instagram.com" not in driver.current_url:
@@ -48,7 +57,7 @@ class HashtagFlow(Flow):
 
             # --- Step 1 ---
             t._step(
-                f"Step 1/6 — Clicking search icon  (tag {tag_index + 1}/{t.max_tags})"
+                f"Step 1/6 — Clicking search icon  (키워드 {plan_idx + 1}/{n_plan})"
             )
             try:
                 ClickSearchIcon().execute(ctx)
@@ -58,7 +67,7 @@ class HashtagFlow(Flow):
             t._random_delay("step1")
 
             # --- Step 2 ---
-            t._step(f"Step 2/6 — Typing #{keyword}")
+            t._step(f"Step 2/6 — '{keyword}' 검색")
             try:
                 TypeSearch().execute(ctx)
             except Exception as exc:
@@ -67,17 +76,17 @@ class HashtagFlow(Flow):
             t._random_delay("step2")
 
             # --- Step 3 ---
-            t._step(f"Step 3/6 — Selecting tag suggestion #{tag_index + 1}")
+            t._step(f"Step 3/6 — '{keyword}' 검색·태그 선택")
             outcome = ClickTagSuggestion().execute(ctx)
             if outcome is Outcome.NEXT_TAG:
-                t._log(f"  [stop] no tag suggestion at index {tag_index}")
+                t._log(f"  [stop] no tag suggestion for '{keyword}'")
                 break
             t._random_delay("step3")
 
             if t._is_blocked(driver):
                 t.blocked_signal.emit()
                 t._log("[blocked] 차단 감지 - 일시정지")
-                t._save_state(tag_index, 0)
+                t._save_state(plan_idx, 0)
                 t._blocked = True
                 return
 
@@ -93,7 +102,7 @@ class HashtagFlow(Flow):
             # Resume support: skip already-processed posts within the
             # resumed tag only (§7).
             resume_post_start = (
-                t._start_post_index if tag_index == t._start_tag_index else 0
+                t._start_post_index if plan_idx == t._start_tag_index else 0
             )
 
             for post_idx, post_url in enumerate(post_urls):
@@ -108,7 +117,7 @@ class HashtagFlow(Flow):
                 # --- Step 4 (navigate to post) ---
                 t._step(
                     f"Step 4/6 — Opening post {post_idx + 1}/{len(post_urls)}"
-                    f"  (tag {tag_index + 1})"
+                    f"  (키워드 {plan_idx + 1}/{n_plan})"
                 )
                 t._log(f"[4] {post_url}")
                 try:
