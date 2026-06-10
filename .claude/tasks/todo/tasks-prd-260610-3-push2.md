@@ -82,14 +82,15 @@
         - [x] 2.1.T1 pytest (`class TestResolveSelector`): MagicMock driver 로 priority1 매칭 시 priority1 반환, priority1 빈 결과→priority2 폴백, 전부 실패→None, coord 타입 파싱.
         - [x] 2.1.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestResolveSelector -v` 실행 및 검증
 
-    - [ ] 2.2 `_apply_stealth(driver)` + UA/창크기 랜덤 + headless
+    - [x] 2.2 `_apply_stealth(driver)` + UA/창크기 랜덤 + headless
         **작업 상세:** §5. 모듈 상수 `_UA_POOL = [...]`(데스크톱 Chrome UA 4~6개), `_WINDOW_PRESETS = [(1280,900),(1440,900),(1366,768),(1536,864)]`.
         `init_driver(web: dict | None = None)` 확장: `web.csv` 토글 반영 — `headless=true` 면 `--headless=new`; `randomize_user_agent=true` 면 `_UA_POOL` 에서 랜덤 UA `--user-agent=`; `randomize_window=true` 면 프리셋 랜덤 `--window-size=`, 아니면 `window_width/height`; `user_data_dir` 채워지면 `--user-data-dir=`; `--disable-blink-features=AutomationControlled` 유지.
         `_apply_stealth(driver)`: `navigator.webdriver` 제거 스크립트 주입(기존 execute_script 유지/확장).
         ⚠️ `random` 사용처는 테스트에서 patch 가능하도록 `core.scraper.random` 통해 호출.
         **참조:** PRD §5, §4 headless, `src/core/scraper.py` `init_driver`
-        - [ ] 2.2.T1 pytest (`class TestStealth`): `randomize_user_agent` 토글 시 UA 인자 추가 여부, `randomize_window` True/False 시 window-size 분기, `headless=true` 시 `--headless=new` 추가. Options 객체는 실제 selenium Options 또는 MagicMock 으로 add_argument 호출 인자 검증(webdriver.Chrome 은 patch).
-        - [ ] 2.2.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestStealth -v` 실행 및 검증
+        - [x] 2.2.T3 [window_width=0 폴백 오류] `0 or 1280` 단락평가로 0이 1280으로 치환되던 문제 수정 (빈문자만 기본값 적용)
+        - [x] 2.2.T1 pytest (`class TestStealth`): `randomize_user_agent` 토글 시 UA 인자 추가 여부, `randomize_window` True/False 시 window-size 분기, `headless=true` 시 `--headless=new` 추가. Options 객체는 실제 selenium Options 또는 MagicMock 으로 add_argument 호출 인자 검증(webdriver.Chrome 은 patch).
+        - [x] 2.2.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestStealth -v` 실행 및 검증
 
     - [ ] 2.3 `_human_type(el, text)` — 글자별 딜레이 타이핑
         **작업 상세:** §5. `typing_char` 딜레이(`self._delays["typing_char"]` = (min,max))를 글자마다 `random.uniform` 후 `el.send_keys(ch)` + `time.sleep`. 빈 문자열 안전 처리. 호출 횟수 = `len(text)`.

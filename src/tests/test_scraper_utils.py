@@ -1,7 +1,13 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from core.scraper import parse_followers, ScraperThread
+from core.scraper import (
+    parse_followers,
+    ScraperThread,
+    _build_chrome_options,
+    _apply_stealth,
+    _UA_POOL,
+)
 
 
 class TestParseFollowers:
@@ -127,6 +133,67 @@ class TestResolveSelector:
         chains = ScraperThread._build_selector_chains(rows)
         assert [r["selector_value"] for r in chains["a"]] == ["x", "y", "z"]
         assert [r["selector_value"] for r in chains["b"]] == ["q"]
+
+
+class TestStealth:
+    @staticmethod
+    def _args(options):
+        return options.arguments
+
+    def test_headless_added_when_true(self):
+        opts = _build_chrome_options({"headless": "true"})
+        assert "--headless=new" in self._args(opts)
+
+    def test_headless_absent_when_false(self):
+        opts = _build_chrome_options({"headless": "false"})
+        assert "--headless=new" not in self._args(opts)
+
+    def test_user_agent_added_when_randomize(self):
+        with patch("core.scraper.random.choice", return_value=_UA_POOL[0]):
+            opts = _build_chrome_options({"randomize_user_agent": "true"})
+        assert any(a.startswith("--user-agent=") for a in self._args(opts))
+        assert f"--user-agent={_UA_POOL[0]}" in self._args(opts)
+
+    def test_user_agent_absent_when_off(self):
+        opts = _build_chrome_options({"randomize_user_agent": "false"})
+        assert not any(a.startswith("--user-agent=") for a in self._args(opts))
+
+    def test_randomize_window_uses_preset(self):
+        with patch("core.scraper.random.choice", return_value=(1366, 768)):
+            opts = _build_chrome_options({"randomize_window": "true"})
+        assert "--window-size=1366,768" in self._args(opts)
+
+    def test_fixed_window_when_not_randomized(self):
+        opts = _build_chrome_options({
+            "randomize_window": "false",
+            "window_width": 1280,
+            "window_height": 900,
+        })
+        assert "--window-size=1280,900" in self._args(opts)
+
+    def test_zero_window_randomizes(self):
+        with patch("core.scraper.random.choice", return_value=(1440, 900)):
+            opts = _build_chrome_options({
+                "randomize_window": "false",
+                "window_width": 0,
+                "window_height": 0,
+            })
+        assert "--window-size=1440,900" in self._args(opts)
+
+    def test_user_data_dir_added(self):
+        opts = _build_chrome_options({"user_data_dir": "/tmp/profile"})
+        assert "--user-data-dir=/tmp/profile" in self._args(opts)
+
+    def test_automation_flag_always_present(self):
+        opts = _build_chrome_options({})
+        assert "--disable-blink-features=AutomationControlled" in self._args(opts)
+
+    def test_apply_stealth_injects_script(self):
+        driver = MagicMock()
+        _apply_stealth(driver)
+        assert driver.execute_script.called
+        joined = " ".join(str(c) for c in driver.execute_script.call_args_list)
+        assert "navigator" in joined and "webdriver" in joined
 
 
 class TestScraperThreadPassesFollowerFilter:
