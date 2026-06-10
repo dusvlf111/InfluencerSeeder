@@ -249,6 +249,27 @@ _FIND_FN = """(function(){
         for (var i = 0; i < cands.length; i++){ var el = __first(cands[i]); if (el) return el; }
         return null;
     }
+    // 실제 마우스 클릭처럼 이벤트 시퀀스를 디스패치(React/IG 가 .click() 만으로는
+    // 반응하지 않는 경우 대응). 좌표는 요소 중심으로 채운다.
+    function __fire(el){
+        try { el.scrollIntoView({block: 'center', inline: 'center'}); } catch (e) {}
+        var r; try { r = el.getBoundingClientRect(); } catch (e) { r = {left:0, top:0, width:0, height:0}; }
+        var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        var base = {bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy, button: 0};
+        var seq = ['pointerover','pointerenter','pointerdown','mousedown',
+                   'pointerup','mouseup','click'];
+        for (var i = 0; i < seq.length; i++){
+            var type = seq[i];
+            try {
+                var Ev = (type.indexOf('pointer') === 0 && window.PointerEvent) ? PointerEvent : MouseEvent;
+                el.dispatchEvent(new Ev(type, base));
+            } catch (e) {
+                try { el.dispatchEvent(new MouseEvent(type.replace('pointer','mouse'), base)); } catch (e2) {}
+            }
+            if (type === 'mousedown') { try { el.focus(); } catch (e) {} }
+        }
+        try { el.click(); } catch (e) {}
+    }
 """
 
 _CLICK_FN = _FIND_FN + """
@@ -256,15 +277,15 @@ _CLICK_FN = _FIND_FN + """
         for (var i = 0; i < cands.length; i++){
             var el = __first(cands[i]);
             if (el) {
-                var tgt = (el.click ? el : (el.closest ? el.closest('a,button,[role=link],[role=button]') : el)) || el;
-                try { tgt.click(); return i; } catch (e) {}
+                var tgt = (el.closest ? (el.closest('a,button,[role=link],[role=button],input') || el) : el);
+                try { __fire(tgt); return i; } catch (e) {}
             }
         }
         return -1;
     }
 """
 
-_CLICK_INDEX_FN = """(function(){
+_CLICK_INDEX_FN = _FIND_FN + """
     function __nodes(c){
         try {
             if (c.type === 'css') return Array.prototype.slice.call(document.querySelectorAll(c.value));
@@ -279,8 +300,8 @@ _CLICK_INDEX_FN = """(function(){
             var ns = __nodes(cands[i]);
             if (ns.length > idx) {
                 var el = ns[idx];
-                var tgt = (el.click ? el : (el.closest ? el.closest('a,button,[role=link],[role=button]') : el)) || el;
-                try { tgt.click(); return true; } catch (e) {}
+                var tgt = (el.closest ? (el.closest('a,button,[role=link],[role=button]') || el) : el);
+                try { __fire(tgt); return true; } catch (e) {}
             }
         }
         return false;
