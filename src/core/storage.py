@@ -100,7 +100,11 @@ from core.storage_config import (  # noqa: E402
     flow_defaults, load_flow, save_flow,
     target_defaults, load_target, save_target,
     delay_defaults, load_delays, save_delays,
+    fields_defaults, load_fields, save_fields,
 )
+
+# Collectable-field name list (Fix-2 B)
+from core.storage_defaults import COLLECT_FIELDS  # noqa: E402,F401
 
 # Selectors (§2.2 — priority fallback 체인)
 from core.storage_selectors import (  # noqa: E402

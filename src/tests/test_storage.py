@@ -289,6 +289,49 @@ class TestTarget:
         assert t["mode"] == "hashtag"
 
 
+# ── Fix-2 B: Collectable fields ────────────────────────────────────────────────
+
+class TestFields:
+    def test_load_returns_defaults_when_no_file(self):
+        f = storage.load_fields()
+        for name in storage.COLLECT_FIELDS:
+            assert f[name] is True
+
+    def test_load_creates_file(self, tmp_data_dir):
+        storage.load_fields()
+        assert (tmp_data_dir / "fields.csv").exists()
+
+    def test_defaults_helper_all_true_bool(self):
+        d = storage.fields_defaults()
+        assert all(v is True for v in d.values())
+        assert set(d.keys()) == set(storage.COLLECT_FIELDS)
+
+    def test_save_and_load_roundtrip(self):
+        storage.save_fields({"followers": False, "bio": False, "full_name": True})
+        f = storage.load_fields()
+        assert f["followers"] is False
+        assert f["bio"] is False
+        assert f["full_name"] is True
+
+    def test_save_accepts_string_values(self):
+        # save normalizes "true"/"false" strings to bool on reload.
+        storage.save_fields({"followers": "false", "website": "true"})
+        f = storage.load_fields()
+        assert f["followers"] is False
+        assert f["website"] is True
+
+    def test_load_merges_missing_keys_with_defaults(self):
+        storage.save_fields({"followers": False})
+        f = storage.load_fields()
+        assert f["followers"] is False
+        assert f["bio"] is True  # default merged
+
+    def test_load_corrupted_file_returns_defaults(self, tmp_data_dir):
+        (tmp_data_dir / "fields.csv").write_bytes(b"\xff\xfe broken")
+        f = storage.load_fields()
+        assert f["followers"] is True
+
+
 # ── 1.6 Results dedup ──────────────────────────────────────────────────────────
 
 class TestResultsDedup:

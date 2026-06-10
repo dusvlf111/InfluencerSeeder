@@ -59,6 +59,18 @@ _TARGET_DEFAULTS: list[tuple[str, str]] = [
     ("mode",          "hashtag"),
 ]
 
+# ── Collectable profile fields (Fix-2 B) ───────────────────────────────────────
+#
+# Which profile fields to extract/save. ``username`` is always collected (not a
+# toggle). Each selectable field defaults to ``true``. ExtractProfile honors these
+# (inactive fields are neither extracted nor saved → blank columns).
+
+COLLECT_FIELDS: list[str] = [
+    "full_name", "followers", "following", "posts_count", "bio", "website", "is_private",
+]
+
+_FIELDS_DEFAULTS: list[tuple[str, str]] = [(f, "true") for f in COLLECT_FIELDS]
+
 # (step_id, (delay_min, delay_max)) per PRD §2.3
 _DELAY_DEFAULTS: list[tuple[str, tuple[float, float]]] = [
     ("step1",       (1.0, 2.5)),

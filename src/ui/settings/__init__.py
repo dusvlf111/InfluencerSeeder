@@ -12,6 +12,7 @@ from .delays_tab import DelaysTabMixin, _DELAY_STEPS
 from .flow_tab import FlowTabMixin
 from .target_tab import TargetTabMixin
 from .mapping_tab import MappingTabMixin
+from .fields_tab import FieldsTabMixin
 from .flowbuilder_tab import FlowBuilderTabMixin
 from .excluded_tab import ExcludedTabMixin
 from .deps_tab import DepsTabMixin
@@ -25,6 +26,7 @@ __all__ = [
     "FlowTabMixin",
     "TargetTabMixin",
     "MappingTabMixin",
+    "FieldsTabMixin",
     "FlowBuilderTabMixin",
     "ExcludedTabMixin",
     "DepsTabMixin",

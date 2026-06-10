@@ -15,7 +15,13 @@ from core.storage_defaults import (
     _FLOW_DEFAULTS,
     _TARGET_DEFAULTS,
     _DELAY_DEFAULTS,
+    _FIELDS_DEFAULTS,
 )
+
+
+def _truthy(value) -> bool:
+    """Normalize a stored kv value (str/bool/int) to a Python bool."""
+    return str(value).strip().lower() in ("true", "1", "yes", "on")
 
 
 # ── Settings (v2 — 유지, 마이그레이션 호환) ─────────────────────────────────────
@@ -98,6 +104,44 @@ def load_target() -> dict:
 def save_target(data: dict):
     from core import storage as _st
     _st._save_kv("target.csv", data)
+
+
+# ── Collectable profile fields (Fix-2 B) — fields.csv ──────────────────────────
+
+def fields_defaults() -> dict:
+    """Default collect-field toggles: every selectable field enabled (bool)."""
+    return {k: _truthy(v) for k, v in _FIELDS_DEFAULTS}
+
+
+def load_fields() -> dict:
+    """Return {field: bool}; defaults written if missing, missing keys merged.
+
+    Stored as a key,value CSV with "true"/"false" strings; values are coerced to
+    Python bool on load. Corrupt files fall back to defaults.
+    """
+    from core import storage as _st
+    path = _st._path("fields.csv")
+    result = fields_defaults()
+    if not path.exists():
+        save_fields(result)
+        return result
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                k = (row.get("key") or "").strip()
+                v = (row.get("value") or "").strip()
+                if k in result:
+                    result[k] = _truthy(v)
+    except Exception:
+        pass
+    return result
+
+
+def save_fields(data: dict):
+    """Persist collect-field toggles as "true"/"false" strings."""
+    from core import storage as _st
+    out = {k: ("true" if _truthy(v) else "false") for k, v in data.items()}
+    _st._save_kv("fields.csv", out)
 
 
 # ── Delays (§2.3) ──────────────────────────────────────────────────────────────

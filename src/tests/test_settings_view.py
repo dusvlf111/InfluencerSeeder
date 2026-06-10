@@ -273,6 +273,47 @@ class TestMappingTable:
         assert view._mapping_table.rowCount() == n
 
 
+# ── Fix-2 B: 수집 항목 탭 ───────────────────────────────────────────────────────
+
+
+class TestFieldsTab:
+    def test_tab_present(self, view):
+        labels = [view._tabs.tabText(i) for i in range(view._tabs.count())]
+        assert "수집 항목" in labels
+
+    def test_username_always_collected_and_disabled(self, view):
+        view.load()
+        assert view._cf_username.isChecked() is True
+        assert view._cf_username.isEnabled() is False
+
+    def test_checkboxes_default_checked(self, view):
+        view.load()
+        for field in storage.COLLECT_FIELDS:
+            assert getattr(view, f"_cf_{field}").isChecked() is True
+
+    def test_collect_fields_settings_shape(self, view):
+        view.load()
+        d = view._collect_fields_settings()
+        assert set(d.keys()) == set(storage.COLLECT_FIELDS)
+        assert all(isinstance(v, bool) for v in d.values())
+
+    def test_round_trip_through_save(self, view):
+        view.load()
+        view._cf_followers.setChecked(False)
+        view._cf_bio.setChecked(False)
+        view._save_all()
+        f = storage.load_fields()
+        assert f["followers"] is False
+        assert f["bio"] is False
+        assert f["full_name"] is True
+
+    def test_populate_reflects_saved(self, view):
+        storage.save_fields({"website": False})
+        view.load()
+        assert view._cf_website.isChecked() is False
+        assert view._cf_followers.isChecked() is True
+
+
 # ── P4: 플로우 빌더 ────────────────────────────────────────────────────────────
 
 

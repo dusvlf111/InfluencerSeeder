@@ -346,9 +346,28 @@ class ExtractProfile(Step):
     """Step 6: Extract profile data from the current profile page. Stores the
     result dict on ``ctx.profile_info``; SKIP_POST when no username found."""
 
+    @staticmethod
+    def _active(ctx) -> set:
+        """Set of profile fields the user opted to collect (Fix-2 B).
+
+        ``username`` is always collected. When no toggle config is present
+        (older threads / tests), every field is treated as active so behavior
+        is unchanged."""
+        cf = getattr(ctx.thread, "__dict__", {}).get("_collect_fields")
+        if not isinstance(cf, dict):
+            return None  # None == collect everything (backward compatible)
+        active = {f for f, on in cf.items() if on}
+        active.add("username")
+        return active
+
     def execute(self, ctx) -> Outcome:
         from selenium.webdriver.common.by import By
         t, driver = ctx.thread, ctx.driver
+
+        active = self._active(ctx)
+
+        def _want(field: str) -> bool:
+            return active is None or field in active
 
         result: dict = {}
 
@@ -366,16 +385,18 @@ class ExtractProfile(Step):
             m_f  = re.search(r"([\d,.万만천억]+)\s*(Followers|팔로워)",  content, re.IGNORECASE)
             m_fw = re.search(r"([\d,.万만천억]+)\s*(Following|팔로우|팔로잉)", content, re.IGNORECASE)
             m_p  = re.search(r"([\d,.万만천억]+)\s*(Posts|게시물)",       content, re.IGNORECASE)
-            if m_f:
+            if m_f and _want("followers"):
                 result["followers"] = m_f.group(1)
-            if m_fw:
+            if m_fw and _want("following"):
                 result["following"] = m_fw.group(1)
-            if m_p:
+            if m_p and _want("posts_count"):
                 result["posts_count"] = m_p.group(1)
         except Exception:
             pass
 
-        if "followers" not in result:
+        if "followers" not in result and (
+            _want("followers") or _want("following") or _want("posts_count")
+        ):
             try:
                 src = driver.page_source
                 for pat, key in [
@@ -385,40 +406,42 @@ class ExtractProfile(Step):
                     (r'"follower_count":(\d+)',                     "followers"),
                 ]:
                     m = re.search(pat, src)
-                    if m and key not in result:
+                    if m and key not in result and _want(key):
                         result[key] = m.group(1)
             except Exception:
                 pass
 
-        _bio_selectors = [
-            "span._ap3a._aaco._aacu._aacx._aad7._aade",
-            "div._aacl._aaco._aacu._aacx._aad7._aade",
-            "header section > div",
-        ]
-        for sel in _bio_selectors:
-            try:
-                el = driver.find_element(By.CSS_SELECTOR, sel)
-                text = el.text.strip()
-                if text:
-                    result["bio"] = text[:300]
-                    break
-            except Exception:
-                continue
+        if _want("bio"):
+            _bio_selectors = [
+                "span._ap3a._aaco._aacu._aacx._aad7._aade",
+                "div._aacl._aaco._aacu._aacx._aad7._aade",
+                "header section > div",
+            ]
+            for sel in _bio_selectors:
+                try:
+                    el = driver.find_element(By.CSS_SELECTOR, sel)
+                    text = el.text.strip()
+                    if text:
+                        result["bio"] = text[:300]
+                        break
+                except Exception:
+                    continue
 
-        try:
-            el = driver.find_element(
-                By.CSS_SELECTOR,
-                "header a[href*='http']:not([href*='instagram.com'])",
-            )
-            result["website"] = el.get_attribute("href") or ""
-        except Exception:
-            result["website"] = ""
+        if _want("website"):
+            try:
+                el = driver.find_element(
+                    By.CSS_SELECTOR,
+                    "header a[href*='http']:not([href*='instagram.com'])",
+                )
+                result["website"] = el.get_attribute("href") or ""
+            except Exception:
+                result["website"] = ""
 
         # ── Fallback: user-configured selectors (버튼매핑 탭) for empty fields ──────
         # Fills fields that meta/page_source/CSS heuristics left empty using the
         # priority selector chains from selectors.csv. Username stays URL-based;
         # this only augments. Failures are swallowed (existing values kept).
-        self._fill_from_selectors(ctx, result)
+        self._fill_from_selectors(ctx, result, active)
 
         t._log(
             f"  [6] @{username_part}  "
@@ -438,15 +461,18 @@ class ExtractProfile(Step):
         ("website",     "website_link",    "href"),
     ]
 
-    def _fill_from_selectors(self, ctx, result: dict) -> None:
+    def _fill_from_selectors(self, ctx, result: dict, active=None) -> None:
         """Augment empty ``result`` fields via the configured selector chains.
 
         For each (field, step_id) pair, when ``result[field]`` is missing/empty,
         resolve the element through ``thread._resolve_selector`` (priority
         fallback, settings first) and read its text / title / href. Any error or
-        empty value leaves the field untouched."""
+        empty value leaves the field untouched. Fields the user opted out of
+        (``active`` set, Fix-2 B) are skipped entirely."""
         t, driver = ctx.thread, ctx.driver
         for field, step_id, mode in self._SELECTOR_FALLBACKS:
+            if active is not None and field not in active:
+                continue
             if result.get(field):
                 continue
             try:

@@ -687,3 +687,73 @@ class TestExtractProfileSelectorFallback:
         # username still set from URL; no followers populated.
         assert ctx.profile_info["username"] == "someuser"
         assert "followers" not in ctx.profile_info
+
+
+class TestExtractProfileCollectFields:
+    """Fix-2 B: ExtractProfile honors thread._collect_fields — inactive fields are
+    neither extracted nor filled via the selector fallback. username is always
+    kept. With no/full config, behavior is unchanged (covered above)."""
+
+    def _thread(self, resolve_map, collect_fields):
+        t = ScraperThread.__new__(ScraperThread)
+        t._log = lambda msg: None
+        t._collect_fields = collect_fields
+        t._resolve_selector = lambda driver, step_id: resolve_map.get(step_id)
+        return t
+
+    def _driver_meta(self, url="https://www.instagram.com/someuser/"):
+        d = MagicMock()
+        d.current_url = url
+        meta = MagicMock()
+        meta.get_attribute.return_value = "5,000 Followers, 10 Following, 3 Posts"
+
+        def _find(by, value):
+            if "meta" in str(value):
+                return meta
+            raise Exception("not found")
+
+        d.find_element.side_effect = _find
+        d.page_source = "<html></html>"
+        return d
+
+    def test_inactive_field_not_extracted_from_meta(self):
+        from core.flows.steps import ExtractProfile
+        # followers off, following on → meta following kept, followers dropped.
+        cf = {"followers": False, "following": True, "posts_count": True,
+              "full_name": True, "bio": True, "website": True, "is_private": True}
+        t = self._thread({}, cf)
+        ctx = ScrapeContext(thread=t, driver=self._driver_meta())
+        ExtractProfile().execute(ctx)
+        info = ctx.profile_info
+        assert info["username"] == "someuser"
+        assert "followers" not in info
+        assert info.get("following") == "10"
+
+    def test_inactive_field_not_filled_from_selector(self):
+        from core.flows.steps import ExtractProfile
+        el = MagicMock()
+        el.get_attribute.return_value = "12,345"
+        el.text = "12,345"
+        # followers toggled off → selector fallback must not fill it.
+        cf = {"followers": False, "following": True, "posts_count": True,
+              "full_name": True, "bio": True, "website": True, "is_private": True}
+
+        d = MagicMock()
+        d.current_url = "https://www.instagram.com/someuser/"
+        d.find_element.side_effect = Exception("not found")
+        d.page_source = "<html></html>"
+        t = self._thread({"followers_count": el}, cf)
+        ctx = ScrapeContext(thread=t, driver=d)
+        ExtractProfile().execute(ctx)
+        assert "followers" not in ctx.profile_info
+
+    def test_username_always_collected(self):
+        from core.flows.steps import ExtractProfile
+        # everything off; username still set from URL.
+        cf = {f: False for f in ("followers", "following", "posts_count",
+                                 "full_name", "bio", "website", "is_private")}
+        t = self._thread({}, cf)
+        ctx = ScrapeContext(thread=t, driver=self._driver_meta())
+        ExtractProfile().execute(ctx)
+        assert ctx.profile_info["username"] == "someuser"
+        assert "followers" not in ctx.profile_info

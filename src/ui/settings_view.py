@@ -16,7 +16,7 @@ import core.storage as storage
 from ui.settings import (
     _as_bool,
     WebTabMixin, DelaysTabMixin, FlowTabMixin, TargetTabMixin,
-    MappingTabMixin, FlowBuilderTabMixin, ExcludedTabMixin,
+    MappingTabMixin, FieldsTabMixin, FlowBuilderTabMixin, ExcludedTabMixin,
     DepsTabMixin, ConfigIOMixin,
 )
 
@@ -27,7 +27,7 @@ __all__ = ["SettingsView", "_as_bool"]
 class SettingsView(
     QWidget,
     WebTabMixin, DelaysTabMixin, FlowTabMixin, TargetTabMixin,
-    MappingTabMixin, FlowBuilderTabMixin, ExcludedTabMixin,
+    MappingTabMixin, FieldsTabMixin, FlowBuilderTabMixin, ExcludedTabMixin,
     DepsTabMixin, ConfigIOMixin,
 ):
     back_requested = pyqtSignal()
@@ -43,6 +43,7 @@ class SettingsView(
         self._selectors: list = []
         self._flow_steps: list = []
         self._excluded: list = []
+        self._fields: dict = {}
         self._process = None
         self._build_ui()
 
@@ -58,6 +59,7 @@ class SettingsView(
         self._selectors  = storage.load_selectors()
         self._flow_steps = storage.load_flow_steps()
         self._excluded   = storage.load_excluded()
+        self._fields     = storage.load_fields()
         self._populate()
 
     # ── UI construction ───────────────────────────────────────────────────────
@@ -117,6 +119,7 @@ class SettingsView(
         self._tabs.addTab(self._build_flow_tab(),      "Flow")
         self._tabs.addTab(self._build_target_tab(),    "Target")
         self._tabs.addTab(self._build_excluded_tab(),  "Excluded")
+        self._tabs.addTab(self._build_fields_tab(),    "수집 항목")
         self._tabs.addTab(self._build_mapping_tab(),   "버튼매핑")
         self._tabs.addTab(self._build_flowbuilder_tab(), "플로우")
         self._tabs.addTab(self._build_deps_tab(),      "Dependencies")
@@ -129,6 +132,7 @@ class SettingsView(
         self._populate_delays(self._delays)
         self._populate_flow(self._flow)
         self._populate_target(self._target)
+        self._populate_fields(self._fields)
         self._populate_mapping(self._selectors)
         self._populate_flow_steps(self._flow_steps)
         self._populate_excluded(self._excluded)
@@ -142,6 +146,8 @@ class SettingsView(
             storage.save_flow(self._collect_flow())
             storage.save_target(self._collect_target())
             storage.save_excluded(self._collect_excluded())
+            # 수집 항목(Fix-2 B) — fields.csv.
+            storage.save_fields(self._collect_fields_settings())
             # 버튼매핑(셀렉터 후보) — save_selectors 데이터 계약(priority int) 유지.
             storage.save_selectors(self._collect_selectors())
             # 플로우 빌더(P4) — flow_steps.csv.

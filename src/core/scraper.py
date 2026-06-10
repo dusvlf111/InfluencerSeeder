@@ -53,6 +53,7 @@ class ScraperThread(QThread):
         selectors=None,
         app_settings: dict | None = None,
         *,
+        fields: dict | None = None,
         web: dict | None = None,
         delays: dict | None = None,
         flow: dict | None = None,
@@ -74,6 +75,9 @@ class ScraperThread(QThread):
         self._delays = delays if delays is not None else storage.load_delays()
         self._flow   = flow   if flow   is not None else storage.load_flow()
         self._target = target if target is not None else storage.load_target()
+        # Collectable profile fields (Fix-2 B): which fields ExtractProfile keeps.
+        # ``username`` is always collected and is not part of this toggle set.
+        self._collect_fields = fields if fields is not None else storage.load_fields()
 
         # Build step_id → row dict from selectors (list of dicts or None)
         rows = storage.load_selectors()
