@@ -16,6 +16,7 @@ class ControlPanel(QWidget):
 
     start_requested = pyqtSignal(dict)   # 수집 파라미터 dict
     resume_requested = pyqtSignal()      # [이어하기] (state.json 기반 재개, §7)
+    stop_requested = pyqtSignal()        # [정지] 버튼
     login_done_requested = pyqtSignal()
     reset_requested = pyqtSignal()
     settings_requested = pyqtSignal()
@@ -79,22 +80,29 @@ class ControlPanel(QWidget):
         settings_grid.addWidget(self._follower_filter, 1, 1)
         layout.addWidget(settings_box)
 
-        # 액션 버튼
-        btn_row = QHBoxLayout()
+        # 액션 버튼 (시작/정지)
+        row1 = QHBoxLayout()
         self._btn_start = QPushButton("수집 시작")
         self._btn_start.setObjectName("btnPrimary")
         self._btn_start.clicked.connect(self._on_start)
-        self._btn_reset = QPushButton("초기화")
-        self._btn_reset.clicked.connect(self.reset_requested)
-        btn_row.addWidget(self._btn_start)
-        btn_row.addWidget(self._btn_reset)
-        layout.addLayout(btn_row)
+        self._btn_stop = QPushButton("정지")
+        self._btn_stop.setObjectName("btnDanger")
+        self._btn_stop.setEnabled(False)
+        self._btn_stop.clicked.connect(self.stop_requested)
+        row1.addWidget(self._btn_start)
+        row1.addWidget(self._btn_stop)
+        layout.addLayout(row1)
 
-        # 이어하기 (state.json 존재 시 활성, §7)
+        # 이어하기 / 초기화
+        row2 = QHBoxLayout()
         self._btn_resume = QPushButton("이어하기")
         self._btn_resume.setEnabled(False)
         self._btn_resume.clicked.connect(self.resume_requested)
-        layout.addWidget(self._btn_resume)
+        self._btn_reset = QPushButton("초기화")
+        self._btn_reset.clicked.connect(self.reset_requested)
+        row2.addWidget(self._btn_resume)
+        row2.addWidget(self._btn_reset)
+        layout.addLayout(row2)
 
         # 제외 계정
         self.excluded_widget = ExcludedAccountsWidget()
@@ -159,4 +167,5 @@ class ControlPanel(QWidget):
         # ``waiting_login`` flag is accepted for signal compatibility but no
         # longer toggles an in-panel button.
         self._btn_start.setEnabled(not running)
+        self._btn_stop.setEnabled(running)
         self._btn_resume.setEnabled(self._btn_resume.isEnabled() and not running)

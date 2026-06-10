@@ -39,6 +39,7 @@ class MainWindow(QMainWindow):
         self._results = ResultsPanel()
         self._control.start_requested.connect(self._start_scrape)
         self._control.resume_requested.connect(self._resume_scrape)
+        self._control.stop_requested.connect(self._stop_scrape)
         self._control.reset_requested.connect(self._reset)
         self._control.settings_requested.connect(self.show_settings)
         splitter.addWidget(self._control)
@@ -147,6 +148,13 @@ class MainWindow(QMainWindow):
         self._login_dialog = None
         self._control.set_running(True, waiting_login=False)
         self._results.set_status("수집 중...")
+
+    def _stop_scrape(self):
+        """정지 버튼 → 스크래퍼 중단, UI 복원."""
+        if self._scraper and self._scraper.isRunning():
+            self._scraper.stop()
+        self._control.set_running(False)
+        self._results.set_status("수집 중단됨")
 
     def _reset(self):
         if self._scraper and self._scraper.isRunning():
