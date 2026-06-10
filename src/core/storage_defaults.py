@@ -77,15 +77,16 @@ _FIELDS_DEFAULTS: list[tuple[str, str]] = [(f, "true") for f in COLLECT_FIELDS]
 
 # (step_id, (delay_min, delay_max)) per PRD §2.3
 _DELAY_DEFAULTS: list[tuple[str, tuple[float, float]]] = [
-    ("step1",       (1.0, 2.5)),
-    ("step2",       (0.5, 1.5)),
-    ("step3",       (2.0, 4.0)),
-    ("step4",       (1.5, 3.0)),
-    ("step5",       (2.0, 4.0)),
-    ("step6",       (0.5, 1.5)),
-    ("back",        (1.0, 2.5)),
-    ("scroll",      (0.8, 2.0)),
-    ("typing_char", (0.05, 0.18)),
+    # 전체적으로 1초 이상 + 넉넉하게(봇 탐지 회피·로딩 대기). typing_char 만 글자당.
+    ("step1",       (1.5, 3.0)),
+    ("step2",       (1.5, 3.0)),
+    ("step3",       (2.5, 5.0)),
+    ("step4",       (2.0, 4.0)),
+    ("step5",       (2.5, 5.0)),
+    ("step6",       (1.5, 3.0)),
+    ("back",        (1.5, 3.0)),
+    ("scroll",      (1.0, 2.5)),
+    ("typing_char", (0.10, 0.30)),
 ]
 
 # ── Selectors (§2.2) — step 당 priority 정렬 fallback 체인 ──────────────────────

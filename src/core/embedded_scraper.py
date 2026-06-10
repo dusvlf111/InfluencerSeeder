@@ -206,13 +206,45 @@ def build_profile_js(selectors: list[dict]) -> str:
     wpayload = json.dumps(web, ensure_ascii=False)
     return _FIND_FN + f"""
         function __txt(cands){{
-            var el = __findFirst(cands); if (!el) return "";
-            var t = (el.getAttribute && el.getAttribute('title')) || "";
-            if (t) return t;
-            return (el.innerText || el.textContent || "").trim();
+            // 후보를 순서대로 시도하되, 매칭돼도 텍스트가 비면 다음 후보로 넘어간다
+            // (빈 래퍼 요소를 먼저 잡아 빈 값을 반환하던 버그 방지).
+            for (var i = 0; i < cands.length; i++){{
+                var el = __first(cands[i]); if (!el) continue;
+                var t = (el.getAttribute && el.getAttribute('title')) || "";
+                if (!t) t = (el.innerText || el.textContent || "");
+                t = (t || "").trim();
+                if (t) return t;
+            }}
+            return "";
+        }}
+        // 소개글 폴백: 설정 셀렉터가 빈 값일 때 헤더에서 내용 기반으로 bio 추출.
+        // 클래스명(난독화)에 의존하지 않아 IG DOM 변경에도 견딘다. 유저네임/카운트/
+        // 버튼/링크 줄을 제외한 leaf 텍스트 중 가장 긴 것을 bio 로 본다(카테고리 줄
+        // 보다 실제 소개글이 길다).
+        function __headerBio(){{
+            var root = document.querySelector('header') || document.querySelector('main');
+            if (!root) return "";
+            var uname = (location.pathname || "").replace(/^\\/|\\/$/g, '').split('/')[0].toLowerCase();
+            var nodes = root.querySelectorAll('span[dir], h1[dir], h1, div[dir]');
+            var best = "";
+            for (var i = 0; i < nodes.length; i++){{
+                var el = nodes[i];
+                if (el.closest('a, button, [role=button], [role=link]')) continue;
+                if (el.querySelector('span[dir], h1[dir], div[dir], a, button')) continue; // leaf 만
+                var t = (el.innerText || el.textContent || "").replace(/\\u00a0/g, ' ').trim();
+                if (!t || t.length < 2) continue;
+                if (t.toLowerCase() === uname) continue;                       // 유저네임
+                if (/^@?[A-Za-z0-9_.]{{1,30}}$/.test(t)) continue;             // 핸들/아이디만
+                if (/\\d/.test(t) && /(게시물|팔로워|팔로우|posts|followers|following)/i.test(t)) continue; // 카운트 줄
+                if (/^(팔로우|팔로잉|메시지(\\s*보내기)?|follow|following|message)$/i.test(t)) continue;   // 버튼
+                if (/외\\s*\\d+\\s*개$/.test(t)) continue;                     // "vo.la/.. 외 4개" 링크 요약
+                if (t.length > best.length) best = t;
+            }}
+            return best;
         }}
         var fields = {fpayload}; var out = {{}};
         for (var k in fields) out[k] = __txt(fields[k]);
+        if (!out.bio) out.bio = __headerBio();
         var w = __findFirst({wpayload});
         out.website = w ? (w.getAttribute('href') || "") : "";
         out.url = location.href;
@@ -429,11 +461,24 @@ class EmbeddedScraper(QObject):
         self.step_signal.emit(msg)
         self._log(f"[step] {msg}")
 
+    # 단계 간 딜레이 하한(초). typing_char(글자당)는 제외하고 모두 최소 1초 이상
+    # 보장 — 기존 delays.csv 값이 작아도 확실히 텀을 둔다.
+    _MIN_DELAY_SEC = 1.0
+
     def _rand_ms(self, key) -> int:
         import random
-        lo, hi = self._delays.get(key, (1.0, 2.5))
+        lo, hi = self._delays.get(key, (1.5, 3.0))
         try:
-            return int(random.uniform(float(lo), float(hi)) * 1000)
+            lo, hi = float(lo), float(hi)
+        except (TypeError, ValueError):
+            lo, hi = 1.5, 3.0
+        if key != "typing_char":
+            lo = max(lo, self._MIN_DELAY_SEC)
+            hi = max(hi, lo + 0.5)
+        if hi < lo:
+            hi = lo
+        try:
+            return int(random.uniform(lo, hi) * 1000)
         except Exception:
             return 1500
 

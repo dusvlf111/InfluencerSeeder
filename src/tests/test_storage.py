@@ -241,9 +241,10 @@ class TestSelectors:
 class TestDelays:
     def test_load_returns_defaults_when_no_file(self):
         d = storage.load_delays()
-        assert d["step1"] == (1.0, 2.5)
-        assert d["typing_char"] == (0.05, 0.18)
-        assert d["scroll"] == (0.8, 2.0)
+        defaults = storage.delay_defaults()
+        assert d["step1"] == defaults["step1"]
+        assert d["typing_char"] == defaults["typing_char"]
+        assert d["scroll"] == defaults["scroll"]
 
     def test_load_creates_file(self, tmp_data_dir):
         storage.load_delays()
@@ -265,12 +266,12 @@ class TestDelays:
         storage.save_delays({"step1": (9.0, 9.0)})
         d = storage.load_delays()
         assert d["step1"] == (9.0, 9.0)
-        assert d["typing_char"] == (0.05, 0.18)  # default merged
+        assert d["typing_char"] == storage.delay_defaults()["typing_char"]  # default merged
 
     def test_load_corrupted_file_returns_defaults(self, tmp_data_dir):
         (tmp_data_dir / "delays.csv").write_bytes(b"\xff\xfe broken")
         d = storage.load_delays()
-        assert d["step1"] == (1.0, 2.5)
+        assert d["step1"] == storage.delay_defaults()["step1"]
 
 
 # ── 1.4 Flow ───────────────────────────────────────────────────────────────────
