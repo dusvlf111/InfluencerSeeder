@@ -173,73 +173,104 @@ class TestSaveAll:
         assert (tmp_path / "selectors.csv").exists()
 
 
-# ── P3: 버튼매핑 카드 ──────────────────────────────────────────────────────────
+# ── A: 버튼매핑 자유 편집 단일 테이블 ──────────────────────────────────────────
 
 
-class TestMappingCards:
-    def test_one_card_per_distinct_step_id(self, view):
+class TestMappingTable:
+    # column indices for the free-form table: Step ID | Step Name | Priority | Type | Value
+    _SID, _NAME, _PRIO, _TYPE, _VALUE = 0, 1, 2, 3, 4
+
+    def test_single_table_populated_from_defaults(self, view):
         view.load()
-        selectors = storage.load_selectors()
-        distinct = []
-        for row in selectors:
-            sid = row.get("step_id")
-            if sid and sid not in distinct:
-                distinct.append(sid)
-        assert list(view._mapping_tables.keys()) == distinct
-
-    def test_card_table_rows_match_candidate_count(self, view):
-        view.load()
-        # search_icon has 3 priority candidates in defaults.
-        table = view._mapping_tables["search_icon"]
-        assert table.rowCount() == 3
-        assert table.item(0, 0).text() in ("1", "1.0")
+        before = storage.load_selectors()
+        # one row per selector candidate (no per-step cards).
+        assert view._mapping_table.rowCount() == len(before)
+        # first column is the (free-form) step_id.
+        first = view._mapping_table.item(0, self._SID).text()
+        assert first == before[0]["step_id"]
 
     def test_collect_selectors_round_trip(self, view):
         view.load()
         before = storage.load_selectors()
         rows = view._collect_selectors()
-        # same total candidate count, priority is int, step_id preserved
+        # same total candidate count, priority is int, step_id preserved.
         assert len(rows) == len(before)
         assert all(isinstance(r["priority"], int) for r in rows)
         assert all(r["step_id"] for r in rows)
 
     def test_edit_value_persists_through_save(self, view):
         view.load()
-        table = view._mapping_tables["search_icon"]
         from PyQt6.QtWidgets import QTableWidgetItem
-        table.setItem(0, 2, QTableWidgetItem("//a[@id='edited']"))
+        table = view._mapping_table
+        # find the first search_icon row and edit its value.
+        target = next(
+            r for r in range(table.rowCount())
+            if table.item(r, self._SID).text() == "search_icon"
+        )
+        table.setItem(target, self._VALUE, QTableWidgetItem("//a[@id='edited']"))
         view._save_all()
         reloaded = storage.load_selectors()
         edited = [r for r in reloaded if r["step_id"] == "search_icon"]
         assert any(r["selector_value"] == "//a[@id='edited']" for r in edited)
 
-    def test_add_and_delete_candidate(self, view):
+    def test_free_form_step_id_round_trip(self, view):
         view.load()
-        table = view._mapping_tables["tag_result"]
+        from PyQt6.QtWidgets import QTableWidgetItem
+        table = view._mapping_table
+        view._mapping_add_row()
+        r = table.rowCount() - 1
+        table.setItem(r, self._SID, QTableWidgetItem("my_custom_step"))
+        table.setItem(r, self._NAME, QTableWidgetItem("커스텀"))
+        table.setItem(r, self._PRIO, QTableWidgetItem("2"))
+        table.setItem(r, self._TYPE, QTableWidgetItem("css"))
+        table.setItem(r, self._VALUE, QTableWidgetItem("div.custom"))
+        view._save_all()
+        reloaded = storage.load_selectors()
+        custom = [r for r in reloaded if r["step_id"] == "my_custom_step"]
+        assert len(custom) == 1
+        assert custom[0]["selector_value"] == "div.custom"
+        assert custom[0]["selector_type"] == "css"
+        assert custom[0]["priority"] == 2
+
+    def test_empty_step_id_row_dropped_on_collect(self, view):
+        view.load()
+        n0 = len(view._collect_selectors())
+        view._mapping_add_row()  # blank step_id row
+        assert len(view._collect_selectors()) == n0
+
+    def test_add_and_delete_row(self, view):
+        view.load()
+        table = view._mapping_table
         n0 = table.rowCount()
-        view._mapping_add_row(table)
+        view._mapping_add_row()
         assert table.rowCount() == n0 + 1
         table.selectRow(table.rowCount() - 1)
-        view._mapping_del_row(table)
+        view._mapping_del_row()
         assert table.rowCount() == n0
 
-    def test_move_candidate_swaps_rows(self, view):
+    def test_move_row_swaps(self, view):
         view.load()
-        table = view._mapping_tables["search_icon"]
         from PyQt6.QtWidgets import QTableWidgetItem
-        table.setItem(0, 2, QTableWidgetItem("AAA"))
-        table.setItem(1, 2, QTableWidgetItem("BBB"))
+        table = view._mapping_table
+        table.setItem(0, self._VALUE, QTableWidgetItem("AAA"))
+        table.setItem(1, self._VALUE, QTableWidgetItem("BBB"))
         table.selectRow(0)
-        view._mapping_move_row(table, 1)
-        assert table.item(0, 2).text() == "BBB"
-        assert table.item(1, 2).text() == "AAA"
+        view._mapping_move_row(1)
+        assert table.item(0, self._VALUE).text() == "BBB"
+        assert table.item(1, self._VALUE).text() == "AAA"
+
+    def test_reset_restores_defaults(self, view):
+        view.load()
+        table = view._mapping_table
+        view._mapping_add_row()  # mutate
+        view._mapping_reset()
+        assert table.rowCount() == len(storage.selector_defaults())
 
     def test_mapping_rebuilds_on_reload(self, view):
         view.load()
-        view.load()  # second load must not duplicate cards
-        assert len(view._mapping_tables) == len({
-            r["step_id"] for r in storage.load_selectors()
-        })
+        n = view._mapping_table.rowCount()
+        view.load()  # second load must not duplicate rows
+        assert view._mapping_table.rowCount() == n
 
 
 # ── P4: 플로우 빌더 ────────────────────────────────────────────────────────────

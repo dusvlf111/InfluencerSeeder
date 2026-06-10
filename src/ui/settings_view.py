@@ -9,7 +9,7 @@
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QFrame, QMessageBox, QTabWidget, QTableWidget,
+    QPushButton, QFrame, QMessageBox, QTabWidget,
 )
 
 import core.storage as storage
@@ -43,9 +43,6 @@ class SettingsView(
         self._selectors: list = []
         self._flow_steps: list = []
         self._excluded: list = []
-        # step_id (declaration order) → its selector candidate QTableWidget.
-        self._mapping_tables: dict[str, QTableWidget] = {}
-        self._mapping_names: dict[str, str] = {}
         self._process = None
         self._build_ui()
 
