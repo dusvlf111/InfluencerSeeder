@@ -22,7 +22,8 @@ class MainWindow(QMainWindow):
     def __init__(self, icon: QIcon | None = None):
         super().__init__()
         self.setWindowTitle("인플루언서 시딩기")
-        self.setMinimumSize(1200, 700)
+        self.setMinimumSize(1280, 760)
+        self.resize(1480, 900)
         if icon and not icon.isNull():
             self.setWindowIcon(icon)
 
@@ -81,8 +82,12 @@ class MainWindow(QMainWindow):
         self._results.login_done_requested.connect(self._login_done)
         outer.addWidget(self._results)
 
-        # 비율: 컨트롤(300) | 브라우저(520) | 결과(380)
-        outer.setSizes([300, 520, 380])
+        # 임베디드 브라우저는 고정 폭(≈293)이라 가운데 패널은 좁게,
+        # 남는 폭은 결과 패널에 더 준다: 컨트롤 | 브라우저 | 결과(넓게).
+        outer.setSizes([300, 320, 760])
+        outer.setStretchFactor(0, 0)
+        outer.setStretchFactor(1, 0)
+        outer.setStretchFactor(2, 1)   # 창을 키우면 결과 패널이 늘어남
         self._stack.addWidget(outer)
 
         # Page 1: settings view

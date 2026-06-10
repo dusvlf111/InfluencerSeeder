@@ -48,8 +48,10 @@ class DelaysTabMixin:
             2, QHeaderView.ResizeMode.ResizeToContents
         )
         self._delay_table.verticalHeader().setVisible(False)
-        self._delay_table.setColumnWidth(1, 90)
-        self._delay_table.setColumnWidth(2, 90)
+        # 입력 칸이 잘리지 않도록 행 높이를 넉넉히.
+        self._delay_table.verticalHeader().setDefaultSectionSize(40)
+        self._delay_table.setColumnWidth(1, 110)
+        self._delay_table.setColumnWidth(2, 110)
 
         for row, (key, label) in enumerate(_DELAY_STEPS):
             name_item = QTableWidgetItem(label)
