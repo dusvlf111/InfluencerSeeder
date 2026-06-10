@@ -119,11 +119,14 @@ class ScraperThread(QThread):
 
         # Build step_id → row dict from selectors (list of dicts or None)
         from core.storage import load_selectors
-        default_rows = {r["step_id"]: r for r in load_selectors()}
-        if isinstance(selectors, list):
-            for row in selectors:
-                default_rows[row["step_id"]] = row
+        rows = load_selectors()
+        if isinstance(selectors, list) and selectors:
+            rows = selectors
+        # Last-wins dict for backward-compat _get_by (single selector per step).
+        default_rows = {r["step_id"]: r for r in rows}
         self._selectors = default_rows
+        # Priority fallback chains: step_id -> [row, ...] sorted by priority asc.
+        self._selector_chains = self._build_selector_chains(rows)
 
         _s = app_settings or {}
         self.posts_per_tag = int(_s.get("posts_per_tag", 5))
@@ -164,6 +167,23 @@ class ScraperThread(QThread):
 
     # ── Selector helpers ──────────────────────────────────────────────────────
 
+    @staticmethod
+    def _build_selector_chains(rows) -> dict:
+        """Group selector rows by step_id, sorted by priority ascending."""
+        chains: dict[str, list] = {}
+        for row in (rows or []):
+            sid = row.get("step_id")
+            if not sid:
+                continue
+            chains.setdefault(sid, []).append(row)
+        for sid, lst in chains.items():
+            lst.sort(key=lambda r: (
+                r.get("priority")
+                if isinstance(r.get("priority"), int)
+                else 9999
+            ))
+        return chains
+
     def _get_by(self, step_id: str):
         """Returns (selenium.By, selector_value) for the given step."""
         from selenium.webdriver.common.by import By
@@ -173,17 +193,71 @@ class ScraperThread(QThread):
         by = By.XPATH if sel_type == "xpath" else By.CSS_SELECTOR
         return by, sel_value
 
+    def _resolve_selector(self, driver, step_id: str):
+        """Try each candidate selector for step_id in priority order.
+
+        Returns the first matching element. For a ``coord`` selector_type,
+        returns a ``("coord", (x, y))`` tuple so the caller can fall back to a
+        coordinate click. Returns ``None`` when nothing matches.
+        """
+        from selenium.webdriver.common.by import By
+        chain = self._selector_chains.get(step_id, [])
+        if not chain:
+            self._log(f"  [selector] no selector chain for {step_id!r}")
+            return None
+        for row in chain:
+            sel_type  = (row.get("selector_type") or "xpath").lower()
+            sel_value = row.get("selector_value") or ""
+            priority  = row.get("priority")
+            if sel_type == "coord":
+                try:
+                    x_str, y_str = str(sel_value).split(",")
+                    coord = (float(x_str.strip()), float(y_str.strip()))
+                    self._log(f"  [selector/{step_id}] priority {priority} coord fallback {coord}")
+                    return ("coord", coord)
+                except Exception:
+                    self._log(f"  [selector/{step_id}] invalid coord {sel_value!r}")
+                    continue
+            by = By.XPATH if sel_type == "xpath" else By.CSS_SELECTOR
+            try:
+                els = driver.find_elements(by, sel_value)
+            except Exception as exc:
+                self._log(f"  [selector/{step_id}] priority {priority} error: {exc}")
+                continue
+            if els:
+                self._log(
+                    f"  [selector/{step_id}] priority {priority} matched {len(els)} element(s)"
+                )
+                return els[0]
+        self._log(f"  [ERROR] [selector/{step_id}] all selectors failed")
+        return None
+
     # ── Step implementations ──────────────────────────────────────────────────
 
     def _step1_click_search_icon(self, driver):
         """Step 1: Click the search/magnifying-glass icon in the sidebar."""
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-        by, value = self._get_by("search_icon")
-        wait = WebDriverWait(driver, 10)
-        el = wait.until(EC.element_to_be_clickable((by, value)))
-        el.click()
+        el = self._resolve_selector(driver, "search_icon")
+        if el is None:
+            raise RuntimeError("search_icon selector chain exhausted")
+        if isinstance(el, tuple) and el[0] == "coord":
+            self._click_coord(driver, el[1])
+        else:
+            el.click()
         self._log("  [1] search icon clicked")
+
+    def _click_coord(self, driver, coord):
+        """Click at an absolute (x, y) pixel coordinate via ActionChains."""
+        x, y = coord
+        from selenium.webdriver.common.action_chains import ActionChains
+        from selenium.webdriver.common.actions.action_builder import ActionBuilder
+        try:
+            actions = ActionChains(driver)
+            actions.w3c_actions = ActionBuilder(driver)
+            actions.w3c_actions.pointer_action.move_to_location(int(x), int(y))
+            actions.w3c_actions.pointer_action.click()
+            actions.perform()
+        except Exception as exc:
+            self._log(f"  [coord-err] click at {coord} failed: {exc}")
 
     def _step2_type_search(self, driver, keyword: str):
         """Step 2: Type the hashtag keyword in the search input."""

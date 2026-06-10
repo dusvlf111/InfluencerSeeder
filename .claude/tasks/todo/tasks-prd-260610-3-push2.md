@@ -74,13 +74,13 @@
 
 - [ ] 2.0 ScraperThread stealth/resume/flow (Push 범위)
 
-    - [ ] 2.1 `_resolve_selector(step_id)` — priority 폴백 체인
+    - [x] 2.1 `_resolve_selector(step_id)` — priority 폴백 체인
         **작업 상세:** §9. 생성자에서 `storage.load_selectors()`(priority 정렬됨)를 `step_id -> [row,...]` 리스트로 그룹화해 보관(`self._selector_chains`).
         `_resolve_selector(self, driver, step_id) -> (element | None)`: 해당 step_id 후보를 priority 순회하며 `selector_type` 에 따라 `By.XPATH`/`By.CSS_SELECTOR` 로 `find_elements`, **처음 매칭(len>0)되는 첫 요소 반환**. `coord` 타입이면 `selector_value="x,y"` 파싱해 좌표 폴백 정보 반환(클릭은 호출측). 모두 실패 시 `None` + `log_signal` 에러. 사용된 priority/매칭 개수를 `_log`.
         기존 `_get_by` 는 유지하되 step 메서드들이 `_resolve_selector` 를 쓰도록 점진 전환(2.1 에서는 헬퍼 추가 + 1곳 이상 적용).
         **참조:** PRD §2.2, §9, 이미지 `1_돋보기 클릭.png`
-        - [ ] 2.1.T1 pytest (`class TestResolveSelector`): MagicMock driver 로 priority1 매칭 시 priority1 반환, priority1 빈 결과→priority2 폴백, 전부 실패→None, coord 타입 파싱.
-        - [ ] 2.1.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestResolveSelector -v` 실행 및 검증
+        - [x] 2.1.T1 pytest (`class TestResolveSelector`): MagicMock driver 로 priority1 매칭 시 priority1 반환, priority1 빈 결과→priority2 폴백, 전부 실패→None, coord 타입 파싱.
+        - [x] 2.1.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestResolveSelector -v` 실행 및 검증
 
     - [ ] 2.2 `_apply_stealth(driver)` + UA/창크기 랜덤 + headless
         **작업 상세:** §5. 모듈 상수 `_UA_POOL = [...]`(데스크톱 Chrome UA 4~6개), `_WINDOW_PRESETS = [(1280,900),(1440,900),(1366,768),(1536,864)]`.
