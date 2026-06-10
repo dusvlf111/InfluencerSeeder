@@ -15,6 +15,7 @@ class ControlPanel(QWidget):
     """좌측 컨트롤 패널 — 검색 설정, 필터, 제외 계정, 버튼."""
 
     start_requested = pyqtSignal(dict)   # 수집 파라미터 dict
+    resume_requested = pyqtSignal()      # [이어하기] (state.json 기반 재개, §7)
     login_done_requested = pyqtSignal()
     reset_requested = pyqtSignal()
     settings_requested = pyqtSignal()
@@ -94,6 +95,12 @@ class ControlPanel(QWidget):
         btn_row.addWidget(self._btn_reset)
         layout.addLayout(btn_row)
 
+        # 이어하기 (state.json 존재 시 활성, §7)
+        self._btn_resume = QPushButton("이어하기")
+        self._btn_resume.setEnabled(False)
+        self._btn_resume.clicked.connect(self.resume_requested)
+        layout.addWidget(self._btn_resume)
+
         # 제외 계정
         self.excluded_widget = ExcludedAccountsWidget()
         layout.addWidget(self.excluded_widget)
@@ -120,24 +127,39 @@ class ControlPanel(QWidget):
             self._search_label.setText("캡션 키워드")
             self._search_input.setPlaceholderText("예: 취업 준비, 인턴십")
 
-    def _on_start(self):
+    def collect_params(self) -> dict | None:
+        """현재 입력값으로 ScraperThread params dict 구성.
+
+        검색어가 비면 None (시작 불가). [이어하기]/[시작] 양쪽에서 재사용.
+        """
         term = self._search_input.text().strip()
         if not term:
-            return
+            return None
         s = storage.load_settings()
-        from core.storage import selector_defaults
-        sel_keys = set(selector_defaults().keys())
-        self.start_requested.emit({
+        # v3: selectors 는 priority-체인 list[dict] (storage.load_selectors).
+        # ScraperThread 생성자가 list 형태를 직접 받는다.
+        return {
             "mode": "hashtag" if self._btn_hashtag.isChecked() else "keyword",
             "search_term": term,
             "count": self._count_spin.value(),
             "min_followers": self._follower_filter.min_followers,
             "max_followers": self._follower_filter.max_followers,
             "excluded_set": set(self.excluded_widget.accounts),
-            "selectors": {k: v for k, v in s.items() if k in sel_keys},
+            "selectors": storage.load_selectors(),
             "app_settings": s,
-        })
+        }
+
+    def _on_start(self):
+        params = self.collect_params()
+        if params is None:
+            return
+        self.start_requested.emit(params)
+
+    def set_resume_available(self, available: bool):
+        """state.json 존재 여부로 [이어하기] 활성화 (§7)."""
+        self._btn_resume.setEnabled(bool(available))
 
     def set_running(self, running: bool, waiting_login: bool = False):
         self._btn_start.setEnabled(not running)
         self._btn_login_done.setEnabled(waiting_login)
+        self._btn_resume.setEnabled(self._btn_resume.isEnabled() and not running)

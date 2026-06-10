@@ -1,0 +1,198 @@
+"""MainWindow / panels tests (push4 4.2~4.5).
+
+pytest-qt 미설치 — qapp 공유 fixture 로 위젯을 직접 생성하고 메서드를 직접
+호출한다(이벤트 루프/실제 클릭 없음). ScraperThread 는 실제 start 하지 않고
+patch/MagicMock 으로 생성을 가로채거나 신호를 수동 emit 한다.
+"""
+import os
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+import core.storage as storage  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _tmp_data_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(storage, "DATA_DIR", tmp_path)
+    yield
+
+
+@pytest.fixture
+def window(qapp):
+    from ui.main_window import MainWindow
+    w = MainWindow()
+    yield w
+    # avoid trayicon teardown noise
+    w._tray = None
+    w.close()
+
+
+# ── 4.2 Tray ────────────────────────────────────────────────────────────────
+
+class TestTray:
+    def test_construction_no_exception(self, window):
+        assert window is not None
+
+    def test_tray_disabled_when_unavailable(self, qapp):
+        from ui.main_window import MainWindow
+        with patch(
+            "ui.main_window.QSystemTrayIcon.isSystemTrayAvailable",
+            return_value=False,
+        ):
+            w = MainWindow()
+            assert w._tray is None  # 미지원 환경에서 조용히 비활성
+
+    def test_setup_tray_when_available(self, qapp):
+        from ui.main_window import MainWindow
+        with patch(
+            "ui.main_window.QSystemTrayIcon.isSystemTrayAvailable",
+            return_value=True,
+        ):
+            w = MainWindow()
+            try:
+                assert w._tray is not None
+            finally:
+                w._tray = None
+                w.close()
+
+    def test_notify_tray_safe_when_no_tray(self, window):
+        window._tray = None
+        # 예외 없이 무시
+        window._notify_tray("t", "m")
+
+    def test_close_without_tray_accepts(self, window):
+        window._tray = None
+        ev = MagicMock()
+        window.closeEvent(ev)
+        ev.accept.assert_called_once()
+
+
+# ── 4.3 Resume ──────────────────────────────────────────────────────────────
+
+class TestResume:
+    def test_resume_available_when_state_exists(self, window):
+        storage.save_state({"keyword": "인턴", "tag_index": 1, "post_index": 2})
+        window._refresh_resume()
+        assert window._control._btn_resume.isEnabled() is True
+
+    def test_resume_disabled_when_no_state(self, window):
+        storage.clear_state()
+        window._refresh_resume()
+        assert window._control._btn_resume.isEnabled() is False
+
+    def test_start_scrape_clears_state_and_injects_no_resume(self, window):
+        storage.save_state({"keyword": "old", "tag_index": 5})
+        window._control._search_input.setText("인턴")
+        params = window._control.collect_params()
+        with patch("ui.main_window.ScraperThread") as MockThread:
+            inst = MockThread.return_value
+            inst.isRunning.return_value = False
+            window._start_scrape(params)
+        # 신규 시작 → state.json 비워짐
+        assert storage.load_state() is None
+        kwargs = MockThread.call_args.kwargs
+        assert kwargs["resume_state"] is None
+        # config 그룹 주입(Push2 생성자 시그니처)
+        for key in ("web", "delays", "flow", "target"):
+            assert key in kwargs
+
+    def test_resume_injects_resume_state(self, window):
+        state = {"keyword": "인턴", "tag_index": 2, "post_index": 3,
+                 "collected_count": 7, "seen_usernames": ["a", "b"]}
+        storage.save_state(state)
+        window._control._search_input.setText("placeholder")
+        with patch("ui.main_window.ScraperThread") as MockThread:
+            inst = MockThread.return_value
+            inst.isRunning.return_value = False
+            window._resume_scrape()
+        kwargs = MockThread.call_args.kwargs
+        assert kwargs["resume_state"] == state
+        # keyword from state overrides search term
+        assert kwargs["search_term"] == "인턴"
+
+    def test_resume_noop_without_state(self, window):
+        storage.clear_state()
+        with patch("ui.main_window.ScraperThread") as MockThread:
+            window._resume_scrape()
+        MockThread.assert_not_called()
+
+
+# ── 4.4 Blocked + Skip ───────────────────────────────────────────────────────
+
+class TestBlockedAndSkip:
+    def test_skip_counter_accumulates(self, window):
+        window._skip_count = 0
+        window._on_skip("alice")
+        window._on_skip("bob")
+        window._on_skip("carol")
+        assert window._skip_count == 3
+        assert "중복skip 3" in window._results._progress_label.text()
+
+    def test_blocked_stops_scraper(self, window):
+        scraper = MagicMock()
+        window._scraper = scraper
+        with patch("ui.main_window.QMessageBox.warning"):
+            window._on_blocked()
+        scraper.stop.assert_called_once()
+
+    def test_blocked_no_scraper_no_exception(self, window):
+        window._scraper = None
+        with patch("ui.main_window.QMessageBox.warning"):
+            window._on_blocked()  # must not raise
+
+    def test_skip_writes_to_run_logger(self, window):
+        logger = MagicMock()
+        window._run_logger = logger
+        window._on_skip("alice")
+        logger.write.assert_called_once()
+
+
+# ── 4.5 Progress label + log color ──────────────────────────────────────────
+
+class TestProgressLabel:
+    @pytest.fixture
+    def panel(self, qapp):
+        from ui.panels.results_panel import ResultsPanel
+        return ResultsPanel()
+
+    def test_label_reflects_collected_and_skip(self, panel):
+        panel.add_result({"username": "a", "followers": "10"})
+        panel.add_result({"username": "b", "followers": "20"})
+        panel.set_skip_count(4)
+        text = panel._progress_label.text()
+        assert "수집 2" in text
+        assert "중복skip 4" in text
+
+    def test_set_step_in_label(self, panel):
+        panel.set_step("태그 1/3")
+        assert "태그 1/3" in panel._progress_label.text()
+
+    def test_collected_count(self, panel):
+        assert panel.collected_count() == 0
+        panel.add_result({"username": "a"})
+        assert panel.collected_count() == 1
+
+    def test_reset_clears_label(self, panel):
+        panel.add_result({"username": "a"})
+        panel.set_skip_count(3)
+        panel.reset()
+        assert panel.collected_count() == 0
+        assert "수집 0" in panel._progress_label.text()
+        assert "중복skip 0" in panel._progress_label.text()
+
+    @pytest.mark.parametrize("msg, expected_attr", [
+        ("[OK] saved", "green"),
+        ("[ERROR] boom", "red"),
+        ("[에러] 오류", "red"),
+        ("[blocked] 차단", "red"),
+        ("[wait] login", "amber"),
+        ("[skip] dup", "amber"),
+        ("[step] 태그", "accent_light"),
+        ("plain info", "muted2"),
+    ])
+    def test_log_color_by_prefix(self, panel, msg, expected_attr):
+        from design.tokens import Colors as Cc
+        assert panel.log_color(msg) == getattr(Cc, expected_attr)

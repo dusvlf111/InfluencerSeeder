@@ -37,7 +37,15 @@ class ResultsPanel(QWidget):
         self._progress_bar = QProgressBar()
         self._progress_bar.setValue(0)
         pb_layout.addWidget(self._progress_bar)
+        # 진행 표시 라벨: 현재 step · 수집 N · 중복skip M (§8)
+        self._progress_label = QLabel("")
+        self._progress_label.setObjectName("labelMuted")
+        pb_layout.addWidget(self._progress_label)
         layout.addWidget(pg_box)
+
+        self._cur_step = ""
+        self._skip_count = 0
+        self._update_progress_label()
 
         # Tabs
         self._tabs = QTabWidget()
@@ -89,17 +97,30 @@ class ResultsPanel(QWidget):
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def append_log(self, msg: str):
+    @staticmethod
+    def log_color(msg: str) -> str:
+        """메시지 prefix → 로그 색상(`Colors.*`). 순수 함수(테스트 용이).
+
+        규칙(src/CLAUDE.md §4): [OK]→green, [ERROR]/[에러]/[오류]→red,
+        [wait]→amber, [step]→accent_light, [blocked]/[차단]→red,
+        [skip]→amber, 그 외→muted2.
+        """
         if msg.startswith("[OK]"):
-            color = C.green
-        elif any(x in msg for x in ("[ERROR]", "[에러]", "[오류]")):
-            color = C.red
-        elif msg.startswith("[wait]"):
-            color = C.amber
-        elif msg.startswith("[step]"):
-            color = C.accent_light
-        else:
-            color = C.muted2
+            return C.green
+        if any(x in msg for x in ("[ERROR]", "[에러]", "[오류]")):
+            return C.red
+        if msg.startswith("[blocked]") or msg.startswith("[차단]"):
+            return C.red
+        if msg.startswith("[wait]"):
+            return C.amber
+        if msg.startswith("[skip]"):
+            return C.amber
+        if msg.startswith("[step]"):
+            return C.accent_light
+        return C.muted2
+
+    def append_log(self, msg: str):
+        color = self.log_color(msg)
         safe = msg.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         self._log_text.append(f'<span style="color:{color}">{safe}</span>')
 
@@ -110,10 +131,32 @@ class ResultsPanel(QWidget):
     def set_status(self, text: str):
         self._step_label.setText(text)
 
+    def set_step(self, step: str):
+        """현재 step 설명 갱신 + 진행 라벨 반영 (§8)."""
+        self._cur_step = step or ""
+        self._update_progress_label()
+
+    def set_skip_count(self, count: int):
+        """중복 skip 카운터 갱신 + 진행 라벨 반영 (§6/§8)."""
+        self._skip_count = int(count)
+        self._update_progress_label()
+
+    def collected_count(self) -> int:
+        return len(self._results)
+
+    def _update_progress_label(self):
+        parts = []
+        if self._cur_step:
+            parts.append(self._cur_step)
+        parts.append(f"수집 {len(self._results)}")
+        parts.append(f"중복skip {self._skip_count}")
+        self._progress_label.setText(" · ".join(parts))
+
     def add_result(self, info: dict):
         self._results.append(info)
         self._add_table_row(info)
         self._count_label.setText(f"{len(self._results)} collected")
+        self._update_progress_label()
 
     def _add_table_row(self, info: dict):
         row = self._table.rowCount()
@@ -148,6 +191,9 @@ class ResultsPanel(QWidget):
         self._log_text.clear()
         self._progress_bar.setValue(0)
         self._step_label.setText("Waiting to start")
+        self._cur_step = ""
+        self._skip_count = 0
+        self._update_progress_label()
 
     def show_log_tab(self):
         self._tabs.setCurrentIndex(1)
