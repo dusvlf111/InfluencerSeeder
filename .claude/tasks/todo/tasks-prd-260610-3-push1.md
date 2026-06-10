@@ -68,13 +68,13 @@
 
 - [ ] 1.0 storage.py 5분리 + dedup + state (Push 범위)
 
-    - [ ] 1.1 web.csv — `load_web()` / `save_web(dict)`
+    - [x] 1.1 web.csv — `load_web()` / `save_web(dict)`
         **작업 상세:** §2.1 스키마(key,value)로 `_WEB_DEFAULTS` 정의:
         `browser=chrome, headless=false, window_width=1280, window_height=900, randomize_window=true, randomize_user_agent=true, user_data_dir=(빈값), locale=ko-KR, implicit_wait=5, page_load_timeout=30`.
         `load_web()` 는 `load_settings` 와 동일 패턴(파일 없으면 save 후 반환, `_coerce` 적용, 손상 시 defaults). `save_web(dict)` 는 key,value 헤더로 기록. bool 값은 `"true"/"false"` 문자열로 저장하되 load 시 `_coerce` 가 문자열로 남기므로, 소비측에서 `str(v).lower()=="true"` 로 해석 가능하도록 `web_defaults()` 헬퍼도 제공.
         **참조:** PRD §2.1, `src/core/storage.py` (load_settings 패턴)
-        - [ ] 1.1.T1 pytest 테스트 작성 (`tests/test_storage.py` 에 `class TestWeb` 추가): 파일 없을 때 defaults 반환·파일 생성, round-trip, 손상 파일 시 defaults, 누락 키 기본값 머지.
-        - [ ] 1.1.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestWeb -v` 실행 및 검증
+        - [x] 1.1.T1 pytest 테스트 작성 (`tests/test_storage.py` 에 `class TestWeb` 추가): 파일 없을 때 defaults 반환·파일 생성, round-trip, 손상 파일 시 defaults, 누락 키 기본값 머지.
+        - [x] 1.1.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestWeb -v` 실행 및 검증
 
     - [ ] 1.2 selectors.csv 확장 — priority + fallback 체인
         **작업 상세:** §2.2 스키마로 `_SELECTOR_FIELDNAMES = ["step_id","step_name","priority","selector_type","selector_value"]` 확장.
