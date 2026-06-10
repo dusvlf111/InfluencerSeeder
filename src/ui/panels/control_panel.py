@@ -84,14 +84,9 @@ class ControlPanel(QWidget):
         self._btn_start = QPushButton("수집 시작")
         self._btn_start.setObjectName("btnPrimary")
         self._btn_start.clicked.connect(self._on_start)
-        self._btn_login_done = QPushButton("로그인 완료")
-        self._btn_login_done.setObjectName("btnSuccess")
-        self._btn_login_done.setEnabled(False)
-        self._btn_login_done.clicked.connect(self.login_done_requested)
         self._btn_reset = QPushButton("초기화")
         self._btn_reset.clicked.connect(self.reset_requested)
         btn_row.addWidget(self._btn_start)
-        btn_row.addWidget(self._btn_login_done)
         btn_row.addWidget(self._btn_reset)
         layout.addLayout(btn_row)
 
@@ -160,6 +155,8 @@ class ControlPanel(QWidget):
         self._btn_resume.setEnabled(bool(available))
 
     def set_running(self, running: bool, waiting_login: bool = False):
+        # Login confirmation is handled solely by LoginWaitDialog now; the
+        # ``waiting_login`` flag is accepted for signal compatibility but no
+        # longer toggles an in-panel button.
         self._btn_start.setEnabled(not running)
-        self._btn_login_done.setEnabled(waiting_login)
         self._btn_resume.setEnabled(self._btn_resume.isEnabled() and not running)

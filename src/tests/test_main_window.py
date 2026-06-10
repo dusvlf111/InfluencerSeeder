@@ -174,6 +174,26 @@ class TestBlockedAndSkip:
         logger.write.assert_called_once()
 
 
+# ── Fix-2 C: 로그인 완료 버튼 제거 ───────────────────────────────────────────
+
+class TestLoginButtonRemoved:
+    def test_control_panel_has_no_login_button(self, window):
+        # The redundant in-panel login button is gone; LoginWaitDialog confirms.
+        assert not hasattr(window._control, "_btn_login_done")
+
+    def test_set_running_waiting_login_no_exception(self, window):
+        # waiting_login flag still accepted (signal compat) but toggles no button.
+        window._control.set_running(True, waiting_login=True)
+        window._control.set_running(False)
+        assert window._control._btn_start.isEnabled() is True
+
+    def test_on_waiting_login_shows_dialog(self, window):
+        window._on_waiting_login()
+        assert window._login_dialog is not None
+        # cleanup
+        window._login_dialog.close()
+
+
 # ── 4.5 Progress label + log color ──────────────────────────────────────────
 
 class TestProgressLabel:

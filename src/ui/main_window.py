@@ -39,7 +39,6 @@ class MainWindow(QMainWindow):
         self._results = ResultsPanel()
         self._control.start_requested.connect(self._start_scrape)
         self._control.resume_requested.connect(self._resume_scrape)
-        self._control.login_done_requested.connect(self._login_done)
         self._control.reset_requested.connect(self._reset)
         self._control.settings_requested.connect(self.show_settings)
         splitter.addWidget(self._control)
