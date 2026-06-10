@@ -7,6 +7,7 @@ a singleton — patching it on any importing module affects the shared object).
 """
 
 import random
+import time
 
 
 # Desktop Chrome user-agent pool for fingerprint randomization (§5).
@@ -40,7 +41,6 @@ def _build_chrome_options(web: dict | None = None):
     options.add_argument("--disable-notifications")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
 
     # Renderer 안정화 — "Timed out receiving message from renderer" 완화.
     # Instagram 은 백그라운드 요청이 끊이지 않아 'normal' 로드 전략에선
@@ -49,6 +49,12 @@ def _build_chrome_options(web: dict | None = None):
     options.page_load_strategy = "eager"
     options.add_argument("--disable-dev-shm-usage")  # /dev/shm 고갈로 인한 렌더러 크래시 방지
     options.add_argument("--no-sandbox")             # 렌더러 기동 실패 완화
+    # Chrome 149 기동 시 렌더러 race 로 인한 간헐적 타임아웃 완화 플래그.
+    options.add_argument("--disable-background-timer-throttling")
+    options.add_argument("--disable-backgrounding-occluded-windows")
+    options.add_argument("--disable-renderer-backgrounding")
+    options.add_argument("--disable-features=Translate,OptimizationHints,CalculateNativeWinOcclusion")
+    options.add_argument("--disable-extensions")
 
     if _truthy(web.get("headless")):
         options.add_argument("--headless=new")
@@ -151,33 +157,61 @@ def _inject_cookies(driver, cookies: list[dict]):
         pass
 
 
-def init_driver(web: dict | None = None, cookies: list[dict] | None = None):
+def _make_one_driver(web, cookies):
+    """Create one Chrome driver, apply timeouts/stealth, and do a warm-up
+    navigation that proves the renderer responds. Raises on any failure (the
+    caller retries with a fresh driver)."""
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
     from webdriver_manager.chrome import ChromeDriverManager
 
-    if web is None:
-        from core.storage import load_web
-        web = load_web()
-
     options = _build_chrome_options(web)
-
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()),
         options=options,
     )
     try:
-        pl_timeout = int(web.get("page_load_timeout") or 30)
-        driver.set_page_load_timeout(pl_timeout)
+        try:
+            driver.set_page_load_timeout(int(web.get("page_load_timeout") or 30))
+        except Exception:
+            pass
+        try:
+            iw = int(web.get("implicit_wait") or 0)
+            if iw > 0:
+                driver.implicitly_wait(iw)
+        except Exception:
+            pass
+        # Warm-up: the FIRST renderer round-trip is where the intermittent
+        # "Timed out receiving message from renderer" strikes. Do it here so a
+        # bad renderer is detected and the whole driver gets retried.
+        driver.get("about:blank")
+        _apply_stealth(driver)
+        if cookies:
+            _inject_cookies(driver, cookies)
+        return driver
     except Exception:
-        pass
-    try:
-        iw = int(web.get("implicit_wait") or 0)
-        if iw > 0:
-            driver.implicitly_wait(iw)
-    except Exception:
-        pass
-    _apply_stealth(driver)
-    if cookies:
-        _inject_cookies(driver, cookies)
-    return driver
+        try:
+            driver.quit()
+        except Exception:
+            pass
+        raise
+
+
+def init_driver(web: dict | None = None, cookies: list[dict] | None = None,
+                attempts: int = 3):
+    """Build a Chrome driver, retrying on the intermittent Chrome 149 renderer
+    timeout. Each attempt uses a fresh driver; raises the last error if all
+    attempts fail."""
+    if web is None:
+        from core.storage import load_web
+        web = load_web()
+
+    last_exc = None
+    for i in range(max(1, attempts)):
+        try:
+            return _make_one_driver(web, cookies)
+        except Exception as exc:
+            last_exc = exc
+            if i < attempts - 1:
+                time.sleep(1.5)  # brief backoff before a fresh launch
+    raise last_exc
