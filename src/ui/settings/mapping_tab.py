@@ -33,6 +33,7 @@ _FLOW_STEPS = [
     ("posts_count",     "게시물 수"),
     ("bio_text",        "소개글"),
     ("website_link",    "웹사이트"),
+    ("back_button",     "뒤로가기 버튼"),
 ]
 _FLOW_LABELS = dict(_FLOW_STEPS)
 

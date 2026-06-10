@@ -90,88 +90,139 @@ _DELAY_DEFAULTS: list[tuple[str, tuple[float, float]]] = [
 
 # ── Selectors (§2.2) — step 당 priority 정렬 fallback 체인 ──────────────────────
 
+# 후보값은 실제 모바일 인스타 DOM(.claude/tasks/버튼맵핑.md) 기준으로, step 당
+# 여러 개를 두어 위→아래 순서로 시도한다(하나 실패 시 다음). 세션마다 바뀌는
+# 자동생성 클래스/mount id 는 쓰지 않고 안정적인 속성(href/placeholder/aria-label)만 사용.
 _SELECTOR_DEFAULTS: list[dict] = [
-    # ── 검색 아이콘 (Step1) ──────────────────────────────────────────────────
-    {   # 모바일: 하단 nav 검색 아이콘 (SVG aria-label)
+    # ── 검색/탐색 아이콘 (Step1) ─────────────────────────────────────────────
+    {
         "step_id": "search_icon", "step_name": "돋보기 클릭(Step1)", "priority": 1,
         "selector_type": "css",
-        "selector_value": "svg[aria-label='Search'], svg[aria-label='검색']",
+        "selector_value": "svg[aria-label='검색'], svg[aria-label='Search']",
     },
-    {   # 폴백: explore 링크
+    {
         "step_id": "search_icon", "step_name": "돋보기 클릭(Step1)", "priority": 2,
         "selector_type": "xpath",
-        "selector_value": "//a[contains(@href,'/explore/') or contains(@href,'/search')]",
+        "selector_value": "//a[contains(@href,'/explore/')]",
+    },
+    {
+        "step_id": "search_icon", "step_name": "돋보기 클릭(Step1)", "priority": 3,
+        "selector_type": "css",
+        "selector_value": "a[href*='/explore/'], a[href*='/search']",
     },
 
-    # ── 검색 입력 (Step2) ────────────────────────────────────────────────────
-    {   # 모바일/데스크톱 공통
+    # ── 검색 입력 (Step2) — 실제: <input type="search" placeholder="검색"> ────
+    {
         "step_id": "search_input", "step_name": "검색 입력(Step2)", "priority": 1,
         "selector_type": "css",
-        "selector_value": "input[type='text'], input[placeholder]",
+        "selector_value": "input[type='search']",
     },
     {
         "step_id": "search_input", "step_name": "검색 입력(Step2)", "priority": 2,
         "selector_type": "xpath",
         "selector_value": "//input[@placeholder='검색' or @placeholder='Search']",
     },
+    {
+        "step_id": "search_input", "step_name": "검색 입력(Step2)", "priority": 3,
+        "selector_type": "css",
+        "selector_value": "input[placeholder], input[type='text']",
+    },
 
-    # ── 태그 결과 클릭 (Step3) ───────────────────────────────────────────────
+    # ── 태그 결과 클릭 (Step3) — 검색 제안의 태그 링크 ────────────────────────
     {
         "step_id": "tag_result", "step_name": "태그 클릭(Step3)", "priority": 1,
         "selector_type": "xpath",
         "selector_value": "//a[contains(@href,'/explore/tags/')]",
     },
+    {
+        "step_id": "tag_result", "step_name": "태그 클릭(Step3)", "priority": 2,
+        "selector_type": "css",
+        "selector_value": "a[href*='/explore/tags/']",
+    },
 
-    # ── 게시물 링크 (Step4) ──────────────────────────────────────────────────
+    # ── 게시물 링크 (Step4) — 그리드 썸네일 ──────────────────────────────────
     {
         "step_id": "post_link", "step_name": "이미지 클릭(Step4)", "priority": 1,
         "selector_type": "xpath",
         "selector_value": "//a[contains(@href,'/p/') or contains(@href,'/reel/')]",
     },
+    {
+        "step_id": "post_link", "step_name": "이미지 클릭(Step4)", "priority": 2,
+        "selector_type": "css",
+        "selector_value": "a[href*='/p/'], a[href*='/reel/']",
+    },
 
-    # ── 프로필 링크 (Step5) ──────────────────────────────────────────────────
-    {   # 모바일: 게시물 상단 유저명 링크
+    # ── 프로필 링크 (Step5) — 게시물 상단 유저명 링크 ─────────────────────────
+    {
         "step_id": "profile_link", "step_name": "프로필 클릭(Step5)", "priority": 1,
         "selector_type": "css",
-        "selector_value": "a[href]:not([href='/']):not([href*='/p/']):not([href*='/explore/']):not([href*='/reel/'])",
+        "selector_value": "article header a[href]:not([href='/'])",
     },
     {
         "step_id": "profile_link", "step_name": "프로필 클릭(Step5)", "priority": 2,
         "selector_type": "css",
         "selector_value": "header a[href]:not([href='/'])",
     },
+    {
+        "step_id": "profile_link", "step_name": "프로필 클릭(Step5)", "priority": 3,
+        "selector_type": "css",
+        "selector_value": "a[href]:not([href='/']):not([href*='/p/']):not([href*='/explore/']):not([href*='/reel/'])",
+    },
 
-    # ── 프로필 페이지 정보 ───────────────────────────────────────────────────
-    {   # 유저네임
+    # ── 프로필 페이지: 유저네임 (header h2/h1) ───────────────────────────────
+    {
         "step_id": "username_text", "step_name": "유저네임", "priority": 1,
+        "selector_type": "css",
+        "selector_value": "header h2, header h1",
+    },
+    {
+        "step_id": "username_text", "step_name": "유저네임", "priority": 2,
         "selector_type": "css",
         "selector_value": "h2, h1",
     },
+
+    # ── 팔로워 수 — 실제: a[href*='/followers/'] 안의 span[title] ────────────
     {
         "step_id": "followers_count", "step_name": "팔로워 수", "priority": 1,
         "selector_type": "xpath",
-        "selector_value": "//a[contains(@href,'/followers/')]//span[@title or @class]",
+        "selector_value": "//a[contains(@href,'/followers/')]//span[@title]",
     },
     {
         "step_id": "followers_count", "step_name": "팔로워 수", "priority": 2,
+        "selector_type": "css",
+        "selector_value": "a[href*='/followers/'] span[title]",
+    },
+    {
+        "step_id": "followers_count", "step_name": "팔로워 수", "priority": 3,
         "selector_type": "xpath",
         "selector_value": "//a[contains(@href,'/followers/')]//span",
     },
+
+    # ── 팔로우 수 ────────────────────────────────────────────────────────────
     {
         "step_id": "following_count", "step_name": "팔로우 수", "priority": 1,
+        "selector_type": "css",
+        "selector_value": "a[href*='/following/'] span[title]",
+    },
+    {
+        "step_id": "following_count", "step_name": "팔로우 수", "priority": 2,
         "selector_type": "xpath",
         "selector_value": "//a[contains(@href,'/following/')]//span",
     },
+
+    # ── 게시물 수 — 실제 모바일: "게시물 <span><span>N</span></span>" ────────
     {
         "step_id": "posts_count", "step_name": "게시물 수", "priority": 1,
         "selector_type": "xpath",
-        "selector_value": "//header//li[1]//span//span",
+        "selector_value": "//span[contains(.,'게시물') or contains(.,'Posts')]//span/span",
     },
     {
         "step_id": "posts_count", "step_name": "게시물 수", "priority": 2,
-        "selector_type": "css",
-        "selector_value": "header ul li:first-child span",
+        "selector_type": "xpath",
+        "selector_value": "//header//li[1]//span//span",
     },
+
+    # ── 소개글 / 웹사이트 ────────────────────────────────────────────────────
     {
         "step_id": "bio_text", "step_name": "소개글", "priority": 1,
         "selector_type": "css",
@@ -181,6 +232,13 @@ _SELECTOR_DEFAULTS: list[dict] = [
         "step_id": "website_link", "step_name": "웹사이트", "priority": 1,
         "selector_type": "css",
         "selector_value": "header a[href*='http']:not([href*='instagram.com'])",
+    },
+
+    # ── 뒤로가기 버튼 — 실제: svg[aria-label='돌아가기'] (go_back 폴백용) ──────
+    {
+        "step_id": "back_button", "step_name": "뒤로가기", "priority": 1,
+        "selector_type": "css",
+        "selector_value": "svg[aria-label='돌아가기'], svg[aria-label='Back']",
     },
 ]
 
