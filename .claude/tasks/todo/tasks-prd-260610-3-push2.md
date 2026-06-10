@@ -117,11 +117,11 @@
         - [x] 2.5.T1 pytest (`class TestResumeAndState`): 생성자에 web/delays/flow/target/excluded 주입 시 속성 매핑 검증, resume_state 주입 시 tag/post index·seen 선로딩, `save_state` 가 `storage.save_state` 를 올바른 dict 로 호출(patch).
         - [x] 2.5.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestResumeAndState -v` 실행 및 검증
 
-    - [ ] 2.6 차단 감지 → `blocked_signal` + 일시정지
+    - [x] 2.6 차단 감지 → `blocked_signal` + 일시정지
         **작업 상세:** §5 한계. `_is_blocked(driver) -> bool`: `driver.current_url` 가 로그인/챌린지 경로(`/accounts/login`, `/challenge`, `/accounts/suspended` 등) 포함이면 True. run() 의 각 네비게이션 후 검사 → True 면 `blocked_signal.emit()` + `_log("[blocked] 차단 감지 - 일시정지")` + 루프 중단(`self._stop` 또는 대기). 로그인 대기와 구분.
         **참조:** PRD §5
-        - [ ] 2.6.T1 pytest (`class TestBlockedDetection`): MagicMock driver.current_url 가 challenge/login URL 일 때 `_is_blocked` True, 정상 프로필 URL 일 때 False.
-        - [ ] 2.6.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestBlockedDetection -v` 실행 및 검증
+        - [x] 2.6.T1 pytest (`class TestBlockedDetection`): MagicMock driver.current_url 가 challenge/login URL 일 때 `_is_blocked` True, 정상 프로필 URL 일 때 False.
+        - [x] 2.6.T2 `cd src && .venv/bin/pytest tests/test_scraper_utils.py::TestBlockedDetection -v` 실행 및 검증
 
     - [ ] 2.7 전체 회귀 검증
         **작업 상세:** `cd src && .venv/bin/pytest tests/ -v`. 기존 `TestParseFollowers`/`TestScraperThreadIsValidUsername`/`TestScraperThreadPassesFollowerFilter` 가 깨지지 않는지 확인(기존 메서드 시그니처 유지). 깨졌으면 호환되도록 수정.

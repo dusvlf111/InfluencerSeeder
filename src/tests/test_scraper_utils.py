@@ -363,6 +363,43 @@ class TestResumeAndState:
         assert t.max_followers == 4000
 
 
+class TestBlockedDetection:
+    def _make_thread(self):
+        t = ScraperThread.__new__(ScraperThread)
+        t._log = lambda msg: None
+        return t
+
+    @pytest.mark.parametrize("url", [
+        "https://www.instagram.com/accounts/login/?next=/",
+        "https://www.instagram.com/challenge/?next=/",
+        "https://www.instagram.com/accounts/suspended/",
+        "https://www.instagram.com/ACCOUNTS/LOGIN/",
+    ])
+    def test_blocked_urls(self, url):
+        t = self._make_thread()
+        driver = MagicMock()
+        driver.current_url = url
+        assert t._is_blocked(driver) is True
+
+    @pytest.mark.parametrize("url", [
+        "https://www.instagram.com/someuser/",
+        "https://www.instagram.com/explore/tags/intern/",
+        "https://www.instagram.com/p/abc123/",
+        "https://www.instagram.com/",
+    ])
+    def test_normal_urls(self, url):
+        t = self._make_thread()
+        driver = MagicMock()
+        driver.current_url = url
+        assert t._is_blocked(driver) is False
+
+    def test_current_url_exception_returns_false(self):
+        t = self._make_thread()
+        driver = MagicMock()
+        type(driver).current_url = property(lambda self: (_ for _ in ()).throw(RuntimeError()))
+        assert t._is_blocked(driver) is False
+
+
 class TestScraperThreadPassesFollowerFilter:
     def _make_thread(self, min_f=0, max_f=0):
         t = ScraperThread.__new__(ScraperThread)
