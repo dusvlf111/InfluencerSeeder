@@ -423,33 +423,14 @@ class ScraperThread(QThread):
             time.sleep(3)
             self._dismiss_popups(driver)
 
-            # 수동 'Login Done' 확인을 없앤다. 임베디드 브라우저에서 미리 로그인한
-            # 세션 쿠키가 주입돼 있으면 보통 이미 로그인 상태 → 바로 진행.
-            # 아니면 사용자에게 "로그인 후 홈 이동 + 팝업 닫기"를 안내하고 자동
-            # 감지될 때까지 폴링한다(버튼 클릭 불필요).
-            if self._is_logged_in(driver):
-                self._log("[OK] 로그인 확인 — 홈에서 수집을 시작합니다.")
-                self.login_ok_signal.emit()
-            else:
-                self._log(
-                    "[wait] 브라우저에서 로그인하고 홈 화면으로 이동한 뒤, "
-                    "모든 팝업(알림/로그인정보 저장 등)을 닫아주세요."
-                )
-                self._waiting_login = True
-                self.waiting_login_signal.emit()
-                while self._waiting_login and not self._stop:
-                    self._dismiss_popups(driver)
-                    if self._is_logged_in(driver):
-                        self._waiting_login = False
-                        self._log("[OK] 로그인 확인 — 홈에서 수집을 시작합니다.")
-                        self.login_ok_signal.emit()
-                        break
-                    time.sleep(2)
+            # 로그인 확인 과정 제거 — 임베디드 브라우저에서 미리 로그인한 세션 쿠키가
+            # 주입돼 있으므로, 별도 확인/대기 없이 바로 수집을 시작한다.
+            self._log("[browser] 홈 진입 — 수집을 시작합니다.")
+            self.login_ok_signal.emit()
 
             if self._stop:
                 return
 
-            self._dismiss_popups(driver)
             time.sleep(1)
 
             # Build excluded set (UI list + CSV file)
