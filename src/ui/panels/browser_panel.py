@@ -16,6 +16,7 @@ import core.storage as storage
 # 우클릭 좌표 등록 메뉴에 노출할 플로우 스텝(step_id, 라벨).
 _COORD_STEPS = [
     ("search_icon",   "검색/탐색 아이콘"),
+    ("search_box",    "검색창 클릭(활성화)"),
     ("search_input",  "검색어 입력창"),
     ("tag_result",    "태그 검색결과"),
     ("post_link",     "게시물(이미지)"),

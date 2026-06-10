@@ -111,6 +111,23 @@ _SELECTOR_DEFAULTS: list[dict] = [
         "selector_value": "a[href*='/explore/'], a[href*='/search']",
     },
 
+    # ── 검색창 클릭 (활성화) — 입력 전에 검색창을 클릭해 포커스 ───────────────
+    {
+        "step_id": "search_box", "step_name": "검색창 클릭", "priority": 1,
+        "selector_type": "css",
+        "selector_value": "input[type='search']",
+    },
+    {
+        "step_id": "search_box", "step_name": "검색창 클릭", "priority": 2,
+        "selector_type": "xpath",
+        "selector_value": "//input[@placeholder='검색' or @placeholder='Search']",
+    },
+    {
+        "step_id": "search_box", "step_name": "검색창 클릭", "priority": 3,
+        "selector_type": "css",
+        "selector_value": "input[placeholder], input[type='text']",
+    },
+
     # ── 검색 입력 (Step2) — 실제: <input type="search" placeholder="검색"> ────
     {
         "step_id": "search_input", "step_name": "검색 입력(Step2)", "priority": 1,

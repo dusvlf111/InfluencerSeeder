@@ -425,7 +425,10 @@ class EmbeddedScraper(QObject):
 
     def _click_search_box(self):
         self._step("검색창 클릭(활성화)")
-        self._click("search_input", self._after_click_box)
+        # 전용 스텝 'search_box' 후보로 클릭(설정/우클릭 좌표로 지정 가능).
+        # 후보가 없으면 검색 입력창(search_input) 으로 폴백.
+        step = "search_box" if self._cands("search_box") else "search_input"
+        self._click(step, self._after_click_box)
 
     def _after_click_box(self, ok):
         if not ok:

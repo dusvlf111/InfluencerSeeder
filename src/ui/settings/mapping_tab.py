@@ -23,10 +23,11 @@ _MAP_TYPES = ["xpath", "css", "coord"]
 # 사용자가 후보를 추가할 수 있게 한다. 여기 없는 step_id 는 뒤에 추가로 표시.
 _FLOW_STEPS = [
     ("search_icon",     "1. 검색/탐색 아이콘 클릭"),
-    ("search_input",    "2. 검색어 입력창"),
-    ("tag_result",      "3. 태그 검색결과 클릭"),
-    ("post_link",       "4. 게시물(이미지) 링크"),
-    ("profile_link",    "5. 프로필 이름/링크 클릭"),
+    ("search_box",      "2. 검색창 클릭(활성화)"),
+    ("search_input",    "3. 검색어 입력창"),
+    ("tag_result",      "4. 태그 검색결과 클릭"),
+    ("post_link",       "5. 게시물(이미지) 클릭"),
+    ("profile_link",    "6. 프로필 이름/링크 클릭"),
     ("username_text",   "유저네임 텍스트"),
     ("followers_count", "팔로워 수"),
     ("following_count", "팔로우 수"),
