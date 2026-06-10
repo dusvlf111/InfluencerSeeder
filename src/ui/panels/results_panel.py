@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QUrl, QTimer, pyqtSignal
-from PyQt6.QtGui import QCursor, QDesktopServices
+from PyQt6.QtCore import Qt, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame,
     QLabel, QPushButton, QProgressBar, QTextEdit,
@@ -72,11 +72,11 @@ class ResultsPanel(QWidget):
         toolbar.addWidget(btn_export)
         layout.addLayout(toolbar)
 
-        # 컬럼: # | 유저네임 | 팔로워 | 팔로잉 | 게시물 | 소개 | 링크
-        self._table = QTableWidget(0, 7)
+        # 컬럼: # | 유저네임 | 팔로워 | 팔로잉 | 게시물 | 소개 | 링크 | 상세
+        self._table = QTableWidget(0, 8)
         self._table.setObjectName("resultsTable")
         self._table.setHorizontalHeaderLabels(
-            ["#", "유저네임", "팔로워", "팔로잉", "게시물", "소개", "링크"]
+            ["#", "유저네임", "팔로워", "팔로잉", "게시물", "소개", "링크", "상세"]
         )
         hh = self._table.horizontalHeader()
         hh.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)         # 소개
@@ -94,16 +94,9 @@ class ResultsPanel(QWidget):
         self._table.setColumnWidth(3, 72)
         self._table.setColumnWidth(4, 64)
         self._table.setColumnWidth(6, 56)
+        self._table.setColumnWidth(7, 64)
         self._table.cellDoubleClicked.connect(self._on_cell_double_clicked)
-        self._table.setMouseTracking(True)
-        self._table.viewport().setMouseTracking(True)
-        self._table.cellEntered.connect(self._on_cell_hovered)
 
-        self._hover_timer = QTimer(self)
-        self._hover_timer.setSingleShot(True)
-        self._hover_timer.setInterval(400)
-        self._hover_timer.timeout.connect(self._show_detail_dialog)
-        self._hover_row = -1
         self._detail_dialog = None
 
         layout.addWidget(self._table)
@@ -258,6 +251,12 @@ class ResultsPanel(QWidget):
             link_item.setToolTip(target)
         self._table.setItem(row, 6, link_item)
 
+        # 상세 버튼 — 클릭 시 캡쳐+정보 상세창(좌우 분할, 이전/다음 네비) 표시
+        btn_detail = QPushButton("상세")
+        btn_detail.setToolTip("프로필 캡쳐 + 상세 정보 보기")
+        btn_detail.clicked.connect(lambda _=False, r=row: self._open_detail(r))
+        self._table.setCellWidget(row, 7, btn_detail)
+
     def load_existing(self):
         """기존 results.csv 를 표에 불러와 누적분이 항상 보이게 한다."""
         try:
@@ -301,27 +300,23 @@ class ResultsPanel(QWidget):
 
     # ── Cell interactions ─────────────────────────────────────────────────────
 
-    def _on_cell_hovered(self, row: int, col: int):
-        if row == self._hover_row:
-            return
-        self._hover_row = row
-        self._hover_timer.stop()
-        if self._detail_dialog is not None:
-            self._detail_dialog.close()
-            self._detail_dialog = None
-        self._hover_timer.start()
-
-    def _show_detail_dialog(self):
-        row = self._hover_row
+    def _open_detail(self, row: int):
+        """'상세' 버튼 → 캡쳐+정보 상세창. 전체 결과 리스트와 현재 row 를 넘겨
+        상세창에서 이전/다음(또는 ←/→ 키)으로 옆 프로필을 넘겨볼 수 있게 한다."""
         if row < 0 or row >= len(self._results):
             return
         from ui.dialogs.profile_detail_dialog import ProfileDetailDialog
-        info = self._results[row]
-        dlg = ProfileDetailDialog(info, self)
-        pos = QCursor.pos()
-        dlg.move(pos.x() + 16, pos.y() + 8)
-        dlg.show()
+        if self._detail_dialog is not None:
+            try:
+                self._detail_dialog.close()
+            except Exception:
+                pass
+            self._detail_dialog = None
+        dlg = ProfileDetailDialog(self._results, row, self)
         self._detail_dialog = dlg
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     def _on_cell_double_clicked(self, row: int, col: int):
         # 유저네임(1) → 프로필, 링크(6) → 웹사이트/게시물. 그 외엔 무시.

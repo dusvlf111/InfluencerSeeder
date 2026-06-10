@@ -11,6 +11,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtWidgets import QMessageBox  # noqa: E402
+
 import core.storage as storage  # noqa: E402
 
 
@@ -25,9 +27,11 @@ def window(qapp):
     from ui.main_window import MainWindow
     w = MainWindow()
     yield w
-    # avoid trayicon teardown noise
+    # avoid trayicon teardown noise; closeEvent 의 종료 확인 모달은 Yes 로 통과
     w._tray = None
-    w.close()
+    with patch("ui.main_window.QMessageBox.question",
+               return_value=QMessageBox.StandardButton.Yes):
+        w.close()
 
 
 # ── 4.2 Tray ────────────────────────────────────────────────────────────────
@@ -56,7 +60,9 @@ class TestTray:
                 assert w._tray is not None
             finally:
                 w._tray = None
-                w.close()
+                with patch("ui.main_window.QMessageBox.question",
+                           return_value=QMessageBox.StandardButton.Yes):
+                    w.close()
 
     def test_notify_tray_safe_when_no_tray(self, window):
         window._tray = None
@@ -66,8 +72,20 @@ class TestTray:
     def test_close_without_tray_accepts(self, window):
         window._tray = None
         ev = MagicMock()
-        window.closeEvent(ev)
+        with patch("ui.main_window.QMessageBox.question",
+                   return_value=QMessageBox.StandardButton.Yes):
+            window.closeEvent(ev)
         ev.accept.assert_called_once()
+
+    def test_close_cancelled_ignores(self, window):
+        # 종료 확인에서 [아니오] → 닫기 취소(event.ignore), accept 안 됨.
+        window._tray = None
+        ev = MagicMock()
+        with patch("ui.main_window.QMessageBox.question",
+                   return_value=QMessageBox.StandardButton.No):
+            window.closeEvent(ev)
+        ev.ignore.assert_called_once()
+        ev.accept.assert_not_called()
 
     def test_restore_from_tray_clears_minimized(self, window):
         # showMinimized then restore → not minimized, no exception (offscreen).
@@ -86,7 +104,9 @@ class TestTray:
         window._tray = MagicMock()
         window.show()
         ev = MagicMock()
-        window.closeEvent(ev)
+        with patch("ui.main_window.QMessageBox.question",
+                   return_value=QMessageBox.StandardButton.Yes):
+            window.closeEvent(ev)
         ev.accept.assert_called_once()
         ev.ignore.assert_not_called()
 
@@ -209,6 +229,84 @@ class TestEmbeddedTargetFilterInit:
         assert s.min_following == 5
         assert s.max_following == 500
         assert s.min_posts == 30
+
+
+# ── 상세 다이얼로그 (버튼 트리거 + 좌우 분할 + 이전/다음·방향키 네비) ──────────
+
+class TestProfileDetailDialog:
+    @pytest.fixture
+    def results(self):
+        return [
+            {"username": "alice", "followers": "1000", "bio": "a"},
+            {"username": "bob", "followers": "2000", "bio": "b"},
+            {"username": "carol", "followers": "3000", "bio": "c"},
+        ]
+
+    def _dlg(self, qapp, results, index=0):
+        from ui.dialogs.profile_detail_dialog import ProfileDetailDialog
+        return ProfileDetailDialog(results, index)
+
+    def test_renders_initial_index(self, qapp, results):
+        d = self._dlg(qapp, results, 1)
+        assert "bob" in d._title.text()
+        assert d._pos_label.text() == "2 / 3"
+
+    def test_next_prev_navigation(self, qapp, results):
+        d = self._dlg(qapp, results, 0)
+        assert d._btn_prev.isEnabled() is False   # 첫 항목
+        d._next()
+        assert "bob" in d._title.text()
+        d._next()
+        assert "carol" in d._title.text()
+        assert d._btn_next.isEnabled() is False    # 마지막
+        d._next()                                  # 더 못 감(클램프)
+        assert "carol" in d._title.text()
+        d._prev()
+        assert "bob" in d._title.text()
+
+    def test_arrow_keys_navigate(self, qapp, results):
+        from PyQt6.QtGui import QKeyEvent
+        from PyQt6.QtCore import QEvent, Qt
+        d = self._dlg(qapp, results, 0)
+        right = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Right,
+                          Qt.KeyboardModifier.NoModifier)
+        d.keyPressEvent(right)
+        assert "bob" in d._title.text()
+        left = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Left,
+                         Qt.KeyboardModifier.NoModifier)
+        d.keyPressEvent(left)
+        assert "alice" in d._title.text()
+
+    def test_empty_results_no_crash(self, qapp):
+        d = self._dlg(qapp, [])
+        assert d._btn_next.isEnabled() is False
+        assert d._btn_prev.isEnabled() is False
+
+
+class TestResultsPanelDetailButton:
+    @pytest.fixture
+    def panel(self, qapp):
+        from ui.panels.results_panel import ResultsPanel
+        return ResultsPanel()
+
+    def test_detail_column_has_button(self, panel):
+        panel.add_result({"username": "alice", "followers": "10"})
+        from PyQt6.QtWidgets import QPushButton
+        w = panel._table.cellWidget(0, 7)
+        assert isinstance(w, QPushButton)
+        assert w.text() == "상세"
+
+    def test_open_detail_creates_dialog(self, panel):
+        panel.add_result({"username": "alice", "followers": "10"})
+        panel.add_result({"username": "bob", "followers": "20"})
+        panel._open_detail(1)
+        assert panel._detail_dialog is not None
+        assert "bob" in panel._detail_dialog._title.text()
+        panel._detail_dialog.close()
+
+    def test_open_detail_out_of_range_noop(self, panel):
+        panel._open_detail(5)  # 결과 없음 → 예외 없이 무시
+        assert panel._detail_dialog is None
 
 
 # ── 4.4 Blocked + Skip ───────────────────────────────────────────────────────

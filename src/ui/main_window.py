@@ -404,7 +404,20 @@ class MainWindow(QMainWindow):
         super().changeEvent(event)
 
     def closeEvent(self, event):
-        """닫기(X) → 완전 종료. 백그라운드 실행은 최소화(−) 버튼으로만."""
+        """닫기(X)/트레이 종료 → 완전 종료 전에 한 번 확인. 백그라운드 실행은
+        최소화(−) 버튼으로만. [아니오] 면 닫기를 취소(event.ignore)한다."""
+        running = bool(self._scraper and self._scraper.isRunning())
+        msg = ("수집이 진행 중입니다. 프로그램을 종료하시겠습니까?" if running
+               else "프로그램을 종료하시겠습니까?")
+        reply = QMessageBox.question(
+            self, "종료 확인", msg,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            event.ignore()
+            return
+
         if self._scraper and self._scraper.isRunning():
             self._scraper.stop()
             self._scraper.wait(2000)
