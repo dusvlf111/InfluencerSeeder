@@ -34,6 +34,8 @@ _WEB_DEFAULTS: list[tuple[str, str]] = [
     ("window_height",        "900"),
     ("randomize_window",     "true"),
     ("randomize_user_agent", "true"),
+    # iPhone 12 Pro 모바일 디바이스 에뮬레이션(390x844, DPR3, iOS Safari UA).
+    ("mobile_ua",            "true"),
     ("user_data_dir",        ""),
     ("locale",               "ko-KR"),
     ("implicit_wait",        "5"),

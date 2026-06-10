@@ -42,7 +42,6 @@ class BrowserPanel(QWebEngineView):
 
         # 인스타 웹 뷰포트를 아이폰 12 의 75% 크기로 고정.
         self.setFixedSize(_EMBED_W, _EMBED_H)
-        self.setZoomFactor(_EMBED_SCALE)
 
         # 영속 프로파일 — data/browser_profile/ 에 쿠키/세션 저장
         profile_dir = str(storage.DATA_DIR / "browser_profile")
@@ -62,7 +61,17 @@ class BrowserPanel(QWebEngineView):
         page = QWebEnginePage(self._profile, self)
         self.setPage(page)
 
+        # ⚠️ zoomFactor 는 setPage 로 페이지가 교체되면 1.0 으로 리셋되고, 페이지
+        # 이동(load)마다도 초기화된다. 따라서 setPage 이후에 적용하고, 매 로드
+        # 완료마다 재적용해야 75% 축소가 유지된다(안 그러면 100%로 보여 "확대"됨).
+        self.setZoomFactor(_EMBED_SCALE)
+        self.loadFinished.connect(self._reapply_zoom)
+
         self.load(QUrl(_HOME_URL))
+
+    def _reapply_zoom(self, *_):
+        """페이지 이동 후 줌이 리셋되므로 75% 를 다시 적용."""
+        self.setZoomFactor(_EMBED_SCALE)
 
     def _on_cookie_added(self, cookie):
         name = bytes(cookie.name()).decode("utf-8", errors="replace")

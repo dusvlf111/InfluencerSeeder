@@ -53,26 +53,33 @@ def _build_chrome_options(web: dict | None = None):
     if _truthy(web.get("headless")):
         options.add_argument("--headless=new")
 
-    _MOBILE_UA = (
-        "Mozilla/5.0 (Linux; Android 13; Pixel 7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.6367.82 Mobile Safari/537.36"
+    # iPhone 12 Pro 디바이스 에뮬레이션 — 논리 해상도 390x844, DPR 3, iOS Safari UA.
+    # (Chrome DevTools 의 "iPhone 12 Pro" 프리셋과 동일한 메트릭/UA)
+    _IPHONE_UA = (
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/17.5 Mobile/15E148 Safari/604.1"
     )
 
-    if _truthy(web.get("mobile_ua")):
-        options.add_argument(f"--user-agent={_MOBILE_UA}")
-        # 모바일 뷰포트 + 터치 에뮬레이션
+    mobile = _truthy(web.get("mobile_ua"))
+    if mobile:
+        options.add_argument(f"--user-agent={_IPHONE_UA}")
+        # iPhone 12 Pro 뷰포트 + 터치 에뮬레이션
         options.add_argument("--window-size=390,844")
         mobile_emulation = {
             "deviceMetrics": {"width": 390, "height": 844, "pixelRatio": 3.0},
-            "userAgent": _MOBILE_UA,
+            "userAgent": _IPHONE_UA,
         }
         options.add_experimental_option("mobileEmulation", mobile_emulation)
     elif _truthy(web.get("randomize_user_agent")):
         ua = random.choice(_UA_POOL)
         options.add_argument(f"--user-agent={ua}")
 
-    if _truthy(web.get("randomize_window")):
+    # 모바일 에뮬레이션이 켜지면 창 크기는 390x844 로 이미 고정했으므로,
+    # randomize_window/창크기 프리셋이 이를 덮어쓰지 않도록 건너뛴다.
+    if mobile:
+        pass
+    elif _truthy(web.get("randomize_window")):
         w, h = random.choice(_WINDOW_PRESETS)
         options.add_argument(f"--window-size={w},{h}")
     else:
