@@ -98,11 +98,11 @@
         - [x] 1.4.T1 pytest 테스트 (`class TestFlow`): defaults 반환·생성, round-trip, 누락 키 머지, 손상 파일 시 defaults.
         - [x] 1.4.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestFlow -v` 실행 및 검증
 
-    - [ ] 1.5 target.csv — `load_target()` / `save_target(dict)`
+    - [x] 1.5 target.csv — `load_target()` / `save_target(dict)`
         **작업 상세:** §2.5 스키마(key,value). `_TARGET_DEFAULTS`: `min_followers=0, max_followers=0, min_following=0, max_following=0, min_posts=0, keyword=(빈값), mode=hashtag`. load/save 동일 패턴.
         **참조:** PRD §2.5
-        - [ ] 1.5.T1 pytest 테스트 (`class TestTarget`): defaults 반환·생성, round-trip, 누락 키 머지, 손상 파일 시 defaults.
-        - [ ] 1.5.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestTarget -v` 실행 및 검증
+        - [x] 1.5.T1 pytest 테스트 (`class TestTarget`): defaults 반환·생성, round-trip, 누락 키 머지, 손상 파일 시 defaults.
+        - [x] 1.5.T2 `cd src && .venv/bin/pytest tests/test_storage.py::TestTarget -v` 실행 및 검증
 
     - [ ] 1.6 results.csv 프로필 스키마 + dedup append + `seen_usernames()`
         **작업 상세:** §3.1 로 `_RESULTS_FIELDNAMES` 교체:
