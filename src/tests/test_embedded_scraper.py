@@ -3,6 +3,7 @@
 from core.embedded_scraper import (
     candidates_for, build_click_js, build_type_js, build_click_index_js,
     build_count_js, dismiss_popup_js, parse_profile, _num_for, _parse_keywords,
+    build_profile_js, _clean_num,
 )
 from core.scraper_parsing import parse_followers
 
@@ -41,6 +42,23 @@ class TestJsBuilders:
         js = dismiss_popup_js()
         assert "Not Now" in js and "닫기" in js
 
+    def test_profile_js_uses_field_selectors(self):
+        sels = [{"step_id": "followers_count", "selector_type": "css",
+                 "selector_value": "a[href*='/followers/'] span[title]"}]
+        js = build_profile_js(sels)
+        assert "followers" in js and "__findFirst" in js and "location.href" in js
+
+
+class TestCleanNum:
+    def test_extracts_first_number(self):
+        assert _clean_num("팔로워 3,632명") == "3,632"
+
+    def test_plain(self):
+        assert _clean_num("3632") == "3632"
+
+    def test_empty(self):
+        assert _clean_num("") == "" and _clean_num("없음") == ""
+
 
 class TestNumFor:
     def test_number_before_label_english(self):
@@ -78,6 +96,26 @@ class TestParseProfile:
             "bio": "", "website": "",
         })
         assert info["username"] == "foo"
+        assert info["followers"] == "3,632"
+
+    def test_dom_field_based(self):
+        # SPA 라 meta 가 없을 때, DOM 셀렉터 필드 텍스트로 채운다.
+        info = parse_profile({
+            "url": "https://www.instagram.com/jakdang.code/",
+            "username": "jakdang.code",
+            "followers": "3632", "following": "10", "posts_count": "6",
+            "bio": "개발자", "website": "http://x.com",
+        })
+        assert info["followers"] == "3632"
+        assert info["following"] == "10"
+        assert info["posts_count"] == "6"
+        assert info["website"] == "http://x.com"
+
+    def test_field_text_with_label_cleaned(self):
+        info = parse_profile({
+            "url": "https://www.instagram.com/x/",
+            "followers": "팔로워 3,632명",
+        })
         assert info["followers"] == "3,632"
 
     def test_blacklisted_username_rejected(self):

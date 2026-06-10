@@ -155,22 +155,65 @@ def _num_for(text: str, label: str) -> str:
     return ""
 
 
+def build_profile_js(selectors: list[dict]) -> str:
+    """프로필 정보를 **DOM 셀렉터**로 추출하는 JS(SPA 라 meta description 은
+    홈 그대로라 못 씀). username_text/followers_count/following_count/
+    posts_count/bio_text/website_link 후보를 사용. count 류는 span[title] 의
+    title 속성을 우선 사용한다."""
+    fields = {
+        "username": candidates_for(selectors, "username_text"),
+        "followers": candidates_for(selectors, "followers_count"),
+        "following": candidates_for(selectors, "following_count"),
+        "posts_count": candidates_for(selectors, "posts_count"),
+        "bio": candidates_for(selectors, "bio_text"),
+    }
+    web = candidates_for(selectors, "website_link")
+    fpayload = json.dumps(fields, ensure_ascii=False)
+    wpayload = json.dumps(web, ensure_ascii=False)
+    return _FIND_FN + f"""
+        function __txt(cands){{
+            var el = __findFirst(cands); if (!el) return "";
+            var t = (el.getAttribute && el.getAttribute('title')) || "";
+            if (t) return t;
+            return (el.innerText || el.textContent || "").trim();
+        }}
+        var fields = {fpayload}; var out = {{}};
+        for (var k in fields) out[k] = __txt(fields[k]);
+        var w = __findFirst({wpayload});
+        out.website = w ? (w.getAttribute('href') || "") : "";
+        out.url = location.href;
+        return out;
+    }})()"""
+
+
+def _clean_num(text: str) -> str:
+    """텍스트에서 첫 숫자 토큰만 추출('팔로워 3,632명' → '3,632')."""
+    if not text:
+        return ""
+    m = re.search(_NUM, str(text))
+    return m.group(0).strip(",.  ") if m else ""
+
+
 def parse_profile(data: dict) -> dict:
     """프로필 JS 결과({url,meta,bio,website})를 results 스키마 dict 로 파싱.
 
     username 은 URL 에서, 팔로워/팔로우/게시물 수는 meta description 에서 추출한다.
     """
     out: dict = {}
-    url = (data.get("url") or "").rstrip("/")
+    url = (data.get("url") or "").rstrip("/").split("?")[0]
     username = url.split("/")[-1] if url else ""
+    if not username or username in _BLACKLISTED_PATHS:
+        # URL 로 못 얻으면 username_text 필드에서 보조 추출.
+        username = (data.get("username") or "").lstrip("@").strip()
     if not username or username in _BLACKLISTED_PATHS:
         return {}
     out["username"] = username
 
+    # DOM 필드(build_profile_js) 우선, 없으면 meta description 폴백.
     content = data.get("meta") or ""
-    fol = _num_for(content, r"Followers|팔로워")
-    fwg = _num_for(content, r"Following|팔로잉|팔로우")
-    pst = _num_for(content, r"Posts|게시물")
+    fol = _clean_num(data.get("followers")) or _num_for(content, r"Followers|팔로워")
+    fwg = _clean_num(data.get("following")) or _num_for(content, r"Following|팔로잉|팔로우")
+    pst = _clean_num(data.get("posts_count")) or _num_for(content, r"Posts|게시물")
     if fol:
         out["followers"] = fol
     if fwg:
@@ -591,8 +634,20 @@ class EmbeddedScraper(QObject):
         self._after("step5", self._extract)
 
     def _extract(self):
-        self._step("프로필 정보 저장")
-        self._js(_PROFILE_JS, self._after_extract)
+        self._step("프로필 정보 저장 (로딩 대기)")
+        self._wait_profile(self._WAIT_TRIES)
+
+    def _wait_profile(self, left):
+        """프로필 헤더(팔로워/유저네임)가 로딩될 때까지 기다렸다 추출."""
+        cands = self._cands("followers_count") + self._cands("username_text")
+        self._js(build_count_js(cands), lambda n: self._on_profile_ready(int(n or 0), left))
+
+    def _on_profile_ready(self, n, left):
+        if n > 0 or left <= 0 or not self._running:
+            self._js(build_profile_js(self._selectors), self._after_extract)
+        else:
+            self._log(f"  [wait/profile] 프로필 로딩 대기... ({self._WAIT_TRIES - left + 1}/{self._WAIT_TRIES})")
+            self._sleep(self._WAIT_MS, lambda: self._wait_profile(left - 1))
 
     def _after_extract(self, data):
         info = parse_profile(data or {})
