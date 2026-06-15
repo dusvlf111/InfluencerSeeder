@@ -89,22 +89,19 @@ jobs:
             --workpath build_tmp \
             --noconfirm
 
-      - name: Create DMG
+      - name: Create ZIP
         run: |
-          mkdir dmg_staging
-          cp -R "인플루언서시딩기.app" dmg_staging/
-          cp scripts/처음_여기서_실행하세요.command dmg_staging/
-          chmod +x "dmg_staging/처음_여기서_실행하세요.command"
-          hdiutil create \
-            -volname "InfluencerSeeder" \
-            -srcfolder dmg_staging \
-            -ov -format UDZO \
-            "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac.dmg"
+          mkdir mac_staging
+          cp -R "인플루언서시딩기.app" mac_staging/
+          cp scripts/처음_여기서_실행하세요.command mac_staging/
+          chmod +x "mac_staging/처음_여기서_실행하세요.command"
+          ditto -c -k --keepParent mac_staging \
+            "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-dmg
-          path: "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac.dmg"
+          name: macos-zip
+          path: "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac.zip"
 
   build-windows:
     needs: bump-version
@@ -154,7 +151,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: macos-dmg
+          name: macos-zip
 
       - uses: actions/download-artifact@v4
         with:
@@ -165,5 +162,5 @@ jobs:
           tag_name: ${{ needs.bump-version.outputs.new_tag }}
           body_path: changelog.txt
           files: |
-            InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac.dmg
+            InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac.zip
             InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-windows.zip
