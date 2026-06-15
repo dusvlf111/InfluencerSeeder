@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>인플루언서시딩기 - 사용법</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      padding: 48px 20px 60px;
+    }
+    .container { max-width: 760px; margin: 0 auto; }
+    .hero { text-align: center; margin-bottom: 52px; }
+    .hero h1 { font-size: 30px; font-weight: 700; margin-bottom: 10px; }
+    .hero p { font-size: 16px; color: #6e6e73; line-height: 1.6; }
+
+    .section-label {
+      font-size: 12px; font-weight: 700; color: #6e6e73;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      margin: 44px 0 14px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .card h2 {
+      font-size: 18px; font-weight: 700; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .card p {
+      font-size: 14px; color: #3a3a3c; line-height: 1.75;
+      margin-bottom: 14px;
+    }
+    .card p:last-child { margin-bottom: 0; }
+    .card img {
+      width: 100%; border-radius: 10px;
+      border: 1px solid #e5e5ea; display: block; margin-top: 14px;
+    }
+    .icon {
+      width: 30px; height: 30px; border-radius: 8px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 15px; flex-shrink: 0;
+    }
+    .icon.blue { background: #e8f0fe; }
+    .icon.green { background: #e8f5e9; }
+    .icon.purple { background: #f3e8ff; }
+    .icon.orange { background: #fff3e0; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .two-col img { width: 100%; border-radius: 10px; border: 1px solid #e5e5ea; }
+    .two-col .caption { font-size: 12px; color: #6e6e73; text-align: center; margin-top: 6px; }
+
+    .tab-list {
+      display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0;
+    }
+    .tab {
+      background: #f0f0f5; border-radius: 20px;
+      padding: 4px 12px; font-size: 13px; font-weight: 600; color: #3a3a3c;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 14px; }
+    th { background: #f5f5f7; padding: 10px 14px; text-align: left; font-weight: 600; color: #6e6e73; border-bottom: 1px solid #e5e5ea; }
+    td { padding: 10px 14px; border-bottom: 1px solid #f0f0f5; color: #3a3a3c; line-height: 1.5; }
+    tr:last-child td { border-bottom: none; }
+
+    .tip {
+      background: #f2f7ff; border-radius: 12px;
+      padding: 16px 20px; font-size: 13px; color: #3a3a3c;
+      line-height: 1.7; margin-top: 14px;
+    }
+    .tip strong { color: #0071e3; }
+
+    .warn {
+      background: #fff8f0; border-radius: 12px;
+      padding: 16px 20px; font-size: 13px; color: #3a3a3c;
+      line-height: 1.7; margin-top: 14px;
+    }
+
+    .footer { text-align: center; font-size: 12px; color: #aeaeb2; margin-top: 48px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="hero">
+    <h1>인플루언서시딩기 사용법</h1>
+    <p>인스타그램 해시태그/키워드 기반 인플루언서 프로필 수집 도구</p>
+  </div>
+
+  <!-- 1. 로그인 -->
+  <p class="section-label">1단계 — 로그인</p>
+
+  <div class="card">
+    <h2><span class="icon blue">🌐</span> 언어를 한국어로 변경 후 로그인</h2>
+    <p>앱을 처음 실행하면 가운데에 인스타그램 로그인 화면이 나타납니다.<br>
+    상단의 <strong>English ∨</strong> 를 클릭해 <strong>한국어</strong>로 변경한 뒤, <strong>로그인 또는 가입하기</strong>를 눌러 인스타그램 계정으로 로그인합니다.</p>
+    <div class="two-col">
+      <div>
+        <img src="app_main_en.png" alt="처음 실행 화면 (영어)">
+        <p class="caption">처음 실행 시 — English</p>
+      </div>
+      <div>
+        <img src="app_main_kr.png" alt="한국어로 변경 후">
+        <p class="caption">한국어로 변경 후</p>
+      </div>
+    </div>
+    <div class="warn">
+      ⚠️ 로그인 후 자동화로 인한 계정 제한이 우려되는 경우, 수집에 사용할 <strong>서브 계정</strong>으로 로그인하는 것을 권장합니다.
+    </div>
+  </div>
+
+  <!-- 2. 메인 화면 -->
+  <p class="section-label">2단계 — 수집 설정</p>
+
+  <div class="card">
+    <h2><span class="icon green">🔍</span> 검색 모드 선택</h2>
+    <p>좌측 패널에서 수집 방식을 선택합니다.</p>
+    <table>
+      <tr><th>모드</th><th>설명</th></tr>
+      <tr><td><strong># 해시태그</strong></td><td>특정 해시태그가 달린 게시물에서 프로필 수집 (예: 취준생, 인턴)</td></tr>
+      <tr><td><strong>캡션 키워드</strong></td><td>게시물 캡션에 특정 키워드가 포함된 프로필 수집</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon green">⚙️</span> 수집 수 및 팔로워 범위 설정</h2>
+    <p>
+      • <strong>수집 수</strong> — 한 번에 수집할 최대 프로필 수 (기본값: 20)<br>
+      • <strong>팔로워 범위</strong> — 최소/최대 팔로워 수 필터 (0 = 제한 없음)
+    </p>
+    <div class="tip">
+      💡 팔로워 범위를 설정하면 범위 밖의 계정은 자동으로 제외됩니다. 예: 최소 500 ~ 최대 10,000 으로 설정 시 마이크로 인플루언서만 수집됩니다.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon green">▶️</span> 수집 시작 / 이어하기 / 정지</h2>
+    <table>
+      <tr><th>버튼</th><th>기능</th></tr>
+      <tr><td><strong>수집 시작</strong></td><td>설정한 조건으로 새로 수집 시작</td></tr>
+      <tr><td><strong>이어하기</strong></td><td>이전에 중단된 수집을 이어서 진행</td></tr>
+      <tr><td><strong>정지</strong></td><td>현재 수집 중단 (수집된 데이터는 유지)</td></tr>
+      <tr><td><strong>초기화</strong></td><td>수집 결과 및 상태 초기화</td></tr>
+    </table>
+  </div>
+
+  <!-- 3. 설정 -->
+  <p class="section-label">3단계 — 상세 설정</p>
+
+  <div class="card">
+    <h2><span class="icon purple">🎯</span> 타겟 설정</h2>
+    <p>좌측 하단 <strong>설정</strong> 버튼 → <strong>타겟</strong> 탭에서 팔로워/팔로잉/게시물 수 필터를 세밀하게 지정할 수 있습니다. <strong>0 = 제한 없음</strong>.</p>
+    <img src="app_settings_target.png" alt="타겟 설정">
+  </div>
+
+  <div class="card">
+    <h2><span class="icon purple">⏱️</span> 딜레이 설정</h2>
+    <p>각 수집 단계 사이의 대기 시간(초)을 Min / Max 범위로 설정합니다. 딜레이가 길수록 자동화 탐지 위험이 낮아집니다.</p>
+    <img src="app_settings_delay.png" alt="딜레이 설정">
+    <div class="warn">⚠️ 딜레이를 너무 짧게 설정하면 계정이 일시적으로 제한될 수 있습니다.</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="icon purple">📦</span> 수집 설정</h2>
+    <p>
+      • <strong>키워드당 게시물 수</strong> — 키워드 1개당 탐색할 게시물 수<br>
+      • <strong>첫 게시물 건너뛰기</strong> — 해시태그의 상단(광고성) 첫 게시물을 건너뜁니다
+    </p>
+    <img src="app_settings_collect.png" alt="수집 설정">
+  </div>
+
+  <div class="card">
+    <h2><span class="icon purple">🚫</span> 제외 계정</h2>
+    <p>수집에서 제외할 인스타그램 계정을 등록합니다. 쉼표로 구분하여 여러 계정을 한 번에 추가할 수 있습니다 (@ 제외).</p>
+    <img src="app_settings_exclude.png" alt="제외 계정 설정">
+  </div>
+
+  <div class="card">
+    <h2><span class="icon purple">🔧</span> 버튼 매핑</h2>
+    <p>인스타그램 UI 변경 시 수집이 실패하는 경우, 이 탭에서 CSS/XPath 셀렉터를 직접 수정할 수 있습니다. 브라우저에서 요소 검사 → Copy → <strong>Copy XPath</strong> 또는 <strong>Copy selector</strong>로 값을 복사해 붙여넣으세요.</p>
+    <img src="app_settings_selector.png" alt="버튼 매핑 설정">
+  </div>
+
+  <!-- 4. 데이터 내보내기 -->
+  <p class="section-label">4단계 — 데이터 내보내기</p>
+
+  <div class="card">
+    <h2><span class="icon orange">📤</span> Export CSV</h2>
+    <p>수집이 완료되면 우측 상단 <strong>Export CSV</strong> 버튼을 클릭합니다.<br>
+    내보낼 항목을 선택한 뒤 <strong>내보내기</strong>를 누르면 ZIP 파일로 저장됩니다.</p>
+    <img src="app_export.png" alt="데이터 내보내기">
+    <table>
+      <tr><th>항목</th><th>설명</th></tr>
+      <tr><td>딜레이 설정 (delays.csv)</td><td>현재 딜레이 설정값</td></tr>
+      <tr><td>플로우 설정 (flow.csv)</td><td>수집 플로우 설정</td></tr>
+      <tr><td>버튼매핑 (selectors.csv)</td><td>CSS/XPath 셀렉터 정보</td></tr>
+      <tr><td>타겟 설정 (target.csv)</td><td>팔로워 범위 등 필터 설정</td></tr>
+      <tr><td>수집 데이터 (results.csv)</td><td>수집된 프로필 전체 데이터</td></tr>
+    </table>
+    <div class="tip">
+      💡 <strong>설정만 내보내기</strong>로 백업해두면 재설치 후 <strong>불러오기</strong>로 그대로 복원할 수 있습니다.
+    </div>
+  </div>
+
+  <p class="footer">인플루언서시딩기 · 문의: GitHub Issues</p>
+</div>
+</body>
+</html>

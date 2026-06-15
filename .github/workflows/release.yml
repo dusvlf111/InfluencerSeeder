@@ -94,8 +94,10 @@ jobs:
           mkdir mac_staging
           cp -R "인플루언서시딩기.app" mac_staging/
           cp scripts/처음_여기서_실행하세요.command mac_staging/
-          cp scripts/읽어주세요.html mac_staging/
+          cp scripts/실행방법.html mac_staging/
+          cp scripts/사용법.html mac_staging/
           cp scripts/guide_*.png mac_staging/ 2>/dev/null || true
+          cp scripts/app_*.png mac_staging/ 2>/dev/null || true
           chmod +x "mac_staging/처음_여기서_실행하세요.command"
           ditto -c -k --keepParent mac_staging \
             "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac.zip"
@@ -131,9 +133,13 @@ jobs:
             --workpath build_tmp `
             --noconfirm
 
-      - name: Zip output
+      - name: Create ZIP
         run: |
-          Compress-Archive -Path "인플루언서시딩기" `
+          New-Item -ItemType Directory -Path "windows_staging" | Out-Null
+          Copy-Item -Recurse "인플루언서시딩기" "windows_staging/"
+          Copy-Item "scripts/사용법.html" "windows_staging/사용방법.html"
+          Copy-Item scripts/app_*.png "windows_staging/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "windows_staging/*" `
             -DestinationPath "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-windows.zip"
 
       - uses: actions/upload-artifact@v4

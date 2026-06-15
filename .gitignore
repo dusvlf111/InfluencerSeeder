@@ -20,3 +20,4 @@ src/build/
 /인플루언서시딩기.exe
 /인플루언서시딩기.app/
 .claude/.task-running
+.DS_Store
