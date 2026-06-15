@@ -97,9 +97,18 @@ jobs:
 
       - name: Create DMG
         run: |
+          mkdir dmg_staging
+          cp -R "인플루언서시딩기.app" dmg_staging/
+          cat > "dmg_staging/처음_여기서_실행하세요.command" << 'SCRIPT'
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+xattr -cr "$DIR/인플루언서시딩기.app" 2>/dev/null
+open "$DIR/인플루언서시딩기.app"
+SCRIPT
+          chmod +x "dmg_staging/처음_여기서_실행하세요.command"
           hdiutil create \
             -volname "InfluencerSeeder" \
-            -srcfolder "인플루언서시딩기.app" \
+            -srcfolder dmg_staging \
             -ov -format UDZO \
             "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac-arm.dmg"
 
@@ -160,9 +169,18 @@ jobs:
 
       - name: Create DMG
         run: |
+          mkdir dmg_staging
+          cp -R "인플루언서시딩기.app" dmg_staging/
+          cat > "dmg_staging/처음_여기서_실행하세요.command" << 'SCRIPT'
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+xattr -cr "$DIR/인플루언서시딩기.app" 2>/dev/null
+open "$DIR/인플루언서시딩기.app"
+SCRIPT
+          chmod +x "dmg_staging/처음_여기서_실행하세요.command"
           hdiutil create \
             -volname "InfluencerSeeder" \
-            -srcfolder "인플루언서시딩기.app" \
+            -srcfolder dmg_staging \
             -ov -format UDZO \
             "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac-intel.dmg"
 
