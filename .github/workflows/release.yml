@@ -95,6 +95,7 @@ jobs:
           cp -R "인플루언서시딩기.app" mac_staging/
           cp scripts/처음_여기서_실행하세요.command mac_staging/
           cp scripts/읽어주세요.html mac_staging/
+          cp scripts/guide_*.png mac_staging/ 2>/dev/null || true
           chmod +x "mac_staging/처음_여기서_실행하세요.command"
           ditto -c -k --keepParent mac_staging \
             "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac.zip"
