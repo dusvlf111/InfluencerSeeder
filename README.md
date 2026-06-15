@@ -44,7 +44,7 @@
 4. **수집 시작** 클릭
 5. 완료 후 **Export CSV** 로 데이터 저장
 
-자세한 사용법은 ZIP 내 **`사용법.html`** 을 참고하세요.
+> 자세한 사용법은 다운로드 ZIP 내 **`사용법.html`** 을 참고하세요.
 
 ---
 
@@ -54,6 +54,8 @@
 
 앱을 시작하면 나타나는 기본 화면입니다.  
 좌측 컨트롤 패널 · 중앙 내장 브라우저 · 우측 결과 패널로 구성됩니다.
+
+![메인 화면](scripts/app_main_kr.png)
 
 | 영역 | 설명 |
 |------|------|
@@ -84,6 +86,26 @@
 | 수집 설정 | 키워드당 게시물 수, 첫 게시물 건너뛰기 여부 |
 | 제외 계정 | 수집 제외 계정 관리 |
 | 버튼매핑 | 인스타그램 UI 요소 CSS/XPath 셀렉터 관리 (UI 변경 시 수동 업데이트) |
+
+**타겟 설정**
+![타겟 설정](scripts/app_settings_target.png)
+
+**딜레이 설정**
+![딜레이 설정](scripts/app_settings_delay.png)
+
+**수집 설정**
+![수집 설정](scripts/app_settings_collect.png)
+
+**버튼 매핑**
+![버튼 매핑](scripts/app_settings_selector.png)
+
+---
+
+### 데이터 내보내기
+
+우측 상단 **Export CSV** 클릭 → 내보낼 항목 선택 → ZIP으로 저장됩니다.
+
+![데이터 내보내기](scripts/app_export.png)
 
 ---
 
