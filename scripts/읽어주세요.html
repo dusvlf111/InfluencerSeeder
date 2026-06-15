@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>인플루언서시딩기 - 시작 가이드</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      padding: 40px 20px;
+    }
+    .container { max-width: 680px; margin: 0 auto; }
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      font-size: 15px;
+      color: #6e6e73;
+      margin-bottom: 40px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .card h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge {
+      background: #0071e3;
+      color: #fff;
+      border-radius: 50%;
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .badge.green { background: #34c759; }
+    .step {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 18px;
+      align-items: flex-start;
+    }
+    .step:last-child { margin-bottom: 0; }
+    .step-num {
+      background: #e8e8ed;
+      color: #1d1d1f;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .step-body p {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #3a3a3c;
+    }
+    .step-body strong {
+      color: #1d1d1f;
+    }
+    .img-placeholder {
+      background: #f0f0f5;
+      border: 2px dashed #c7c7cc;
+      border-radius: 10px;
+      height: 160px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #aeaeb2;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+    .img-placeholder img {
+      max-width: 100%;
+      max-height: 100%;
+      border-radius: 8px;
+      display: block;
+    }
+    .tip {
+      background: #fff9e6;
+      border-left: 3px solid #ff9f0a;
+      border-radius: 0 8px 8px 0;
+      padding: 12px 14px;
+      font-size: 13px;
+      color: #3a3a3c;
+      margin-top: 16px;
+      line-height: 1.6;
+    }
+    .divider {
+      text-align: center;
+      color: #aeaeb2;
+      font-size: 13px;
+      margin: 20px 0;
+      position: relative;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: 42%;
+      height: 1px;
+      background: #e5e5ea;
+    }
+    .divider::before { left: 0; }
+    .divider::after { right: 0; }
+    .footer {
+      text-align: center;
+      font-size: 12px;
+      color: #aeaeb2;
+      margin-top: 32px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>인플루언서시딩기</h1>
+    <p class="subtitle">처음 실행 전에 이 안내를 읽어주세요</p>
+
+    <!-- 방법 1: 커맨드 파일 -->
+    <div class="card">
+      <h2><span class="badge">1</span> 처음_여기서_실행하세요.command 사용 (권장)</h2>
+
+      <div class="step">
+        <span class="step-num">1</span>
+        <div class="step-body">
+          <p>ZIP 파일을 압축 해제하면 아래 두 파일이 보입니다.</p>
+          <div class="img-placeholder">
+            <!-- 파일 목록 스크린샷을 guide_folder.png 로 저장 후 아래 주석 해제 -->
+            <!-- <img src="guide_folder.png" alt="폴더 내용"> -->
+            이미지: 압축 해제 후 폴더 내용
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-num">2</span>
+        <div class="step-body">
+          <p><strong>처음_여기서_실행하세요.command</strong> 파일을 더블클릭합니다.</p>
+          <div class="img-placeholder">
+            <!-- <img src="guide_command.png" alt="command 파일 더블클릭"> -->
+            이미지: command 파일 더블클릭
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-num">3</span>
+        <div class="step-body">
+          <p>아래와 같은 경고창이 뜨면 <strong>"열기"</strong>를 클릭합니다.</p>
+          <div class="img-placeholder">
+            <!-- <img src="guide_warning.png" alt="경고창 열기"> -->
+            이미지: "이 스크립트를 실행할까요?" 경고창
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-num">4</span>
+        <div class="step-body">
+          <p>터미널 창이 잠깐 나타났다 사라지면서 <strong>앱이 자동으로 실행</strong>됩니다.<br>
+          다음부터는 <strong>인플루언서시딩기.app</strong>을 바로 더블클릭해서 여세요.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider">또는</div>
+
+    <!-- 방법 2: 시스템 설정 -->
+    <div class="card">
+      <h2><span class="badge">2</span> 시스템 설정에서 직접 허용</h2>
+
+      <div class="step">
+        <span class="step-num">1</span>
+        <div class="step-body">
+          <p><strong>인플루언서시딩기.app</strong>을 더블클릭합니다.<br>
+          "확인되지 않은 개발자" 또는 "손상됨" 경고가 뜨면 <strong>취소</strong>를 누릅니다.</p>
+          <div class="img-placeholder">
+            <!-- <img src="guide_blocked.png" alt="차단 경고"> -->
+            이미지: 앱 차단 경고창
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-num">2</span>
+        <div class="step-body">
+          <p>Apple 메뉴 → <strong>시스템 설정</strong> → <strong>개인 정보 보호 및 보안</strong>으로 이동합니다.</p>
+          <div class="img-placeholder">
+            <!-- <img src="guide_settings.png" alt="시스템 설정"> -->
+            이미지: 개인 정보 보호 및 보안 화면
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-num">3</span>
+        <div class="step-body">
+          <p>아래쪽에 <strong>"인플루언서시딩기"이(가) 차단되었습니다</strong> 문구 옆<br>
+          <strong>"그래도 열기"</strong> 버튼을 클릭합니다.</p>
+          <div class="img-placeholder">
+            <!-- <img src="guide_open_anyway.png" alt="그래도 열기"> -->
+            이미지: 그래도 열기 버튼
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-num">4</span>
+        <div class="step-body">
+          <p>비밀번호를 입력하면 앱이 실행됩니다.<br>
+          다음부터는 바로 더블클릭으로 열 수 있습니다.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip">
+      💡 이 안내는 Apple의 보안 정책 때문에 필요합니다. 악성 소프트웨어가 아니며, 한 번만 허용하면 이후에는 정상적으로 실행됩니다.
+    </div>
+
+    <p class="footer">인플루언서시딩기 · 문의: GitHub Issues</p>
+  </div>
+</body>
+</html>
