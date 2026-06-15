@@ -23,15 +23,27 @@ jobs:
           LATEST=$(git tag --sort=-v:refname | grep '^v' | head -1)
           if [ -z "$LATEST" ]; then
             NEW_TAG="v1.0.0"
+            LOG=$(git log --pretty="- %s" | head -30)
           else
             IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST#v}"
             NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+            LOG=$(git log --pretty="- %s" "${LATEST}..HEAD")
           fi
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          {
+            echo "## 변경사항"
+            echo ""
+            echo "$LOG"
+          } > changelog.txt
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag "$NEW_TAG"
           git push origin "$NEW_TAG"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: changelog.txt
 
   build-macos:
     needs: bump-version
@@ -76,7 +88,12 @@ jobs:
 
       - name: Ad-hoc sign .app
         run: |
-          codesign --deep --force --sign - "인플루언서시딩기.app"
+          APP="인플루언서시딩기.app"
+          find "$APP" -type f \( -name "*.dylib" -o -name "*.so" \) \
+            -exec codesign --force --sign - {} \; 2>/dev/null || true
+          find "$APP" -name "*.framework" -type d | sort -r | \
+            xargs -I {} codesign --force --sign - {} 2>/dev/null || true
+          codesign --force --sign - "$APP"
 
       - name: Create DMG
         run: |
@@ -135,6 +152,10 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          name: changelog
+
+      - uses: actions/download-artifact@v4
+        with:
           name: macos-dmg
 
       - uses: actions/download-artifact@v4
@@ -144,7 +165,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.bump-version.outputs.new_tag }}
-          generate_release_notes: true
+          body_path: changelog.txt
           files: |
             InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac.dmg
             InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-windows.zip
