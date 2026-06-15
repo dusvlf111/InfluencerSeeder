@@ -26,7 +26,10 @@ jobs:
             LOG=$(git log --pretty="- %s" | head -30)
           else
             IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST#v}"
-            NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+            PATCH=$((PATCH + 1))
+            if [ $PATCH -ge 10 ]; then PATCH=0; MINOR=$((MINOR + 1)); fi
+            if [ $MINOR -ge 10 ]; then MINOR=0; MAJOR=$((MAJOR + 1)); fi
+            NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
             LOG=$(git log --pretty="- %s" "${LATEST}..HEAD")
           fi
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
