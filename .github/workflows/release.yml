@@ -89,15 +89,6 @@ jobs:
             --workpath build_tmp \
             --noconfirm
 
-      - name: Ad-hoc sign .app
-        run: |
-          APP="인플루언서시딩기.app"
-          find "$APP" -type f \( -name "*.dylib" -o -name "*.so" \) \
-            -exec codesign --force --sign - {} \; 2>/dev/null || true
-          find "$APP" -name "*.framework" -type d | sort -r | \
-            xargs -I {} codesign --force --sign - {} 2>/dev/null || true
-          codesign --force --sign - "$APP"
-
       - name: Create DMG
         run: |
           mkdir dmg_staging
