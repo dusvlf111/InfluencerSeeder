@@ -51,6 +51,21 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
+      - name: Generate icon.icns from icon.png
+        run: |
+          mkdir -p src/assets/icon.iconset
+          sips -z 16 16     src/assets/icon.png --out src/assets/icon.iconset/icon_16x16.png
+          sips -z 32 32     src/assets/icon.png --out src/assets/icon.iconset/icon_16x16@2x.png
+          sips -z 32 32     src/assets/icon.png --out src/assets/icon.iconset/icon_32x32.png
+          sips -z 64 64     src/assets/icon.png --out src/assets/icon.iconset/icon_32x32@2x.png
+          sips -z 128 128   src/assets/icon.png --out src/assets/icon.iconset/icon_128x128.png
+          sips -z 256 256   src/assets/icon.png --out src/assets/icon.iconset/icon_128x128@2x.png
+          sips -z 256 256   src/assets/icon.png --out src/assets/icon.iconset/icon_256x256.png
+          sips -z 512 512   src/assets/icon.png --out src/assets/icon.iconset/icon_256x256@2x.png
+          sips -z 512 512   src/assets/icon.png --out src/assets/icon.iconset/icon_512x512.png
+          sips -z 1024 1024 src/assets/icon.png --out src/assets/icon.iconset/icon_512x512@2x.png
+          iconutil -c icns src/assets/icon.iconset -o src/assets/icon.icns
+
       - name: Build .app
         working-directory: src
         run: |
@@ -58,6 +73,10 @@ jobs:
             --distpath ../ \
             --workpath build_tmp \
             --noconfirm
+
+      - name: Ad-hoc sign .app
+        run: |
+          codesign --deep --force --sign - "인플루언서시딩기.app"
 
       - name: Create DMG
         run: |

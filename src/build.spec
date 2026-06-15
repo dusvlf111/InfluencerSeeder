@@ -75,7 +75,7 @@ if sys.platform == "darwin":
     app = BUNDLE(
         coll,
         name=APP_NAME + ".app",
-        # icon="assets/icon.icns",  # macOS 아이콘 (준비 시 주석 해제)
+        icon=str(BASE / "assets" / "icon.icns"),
         bundle_identifier="com.letscxreer.influencerseeder",
         info_plist={
             "NSHighResolutionCapable": True,
