@@ -1,0 +1,101 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: src/requirements.txt
+
+      - name: Install dependencies
+        working-directory: src
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build .app
+        working-directory: src
+        run: |
+          python -m PyInstaller build.spec \
+            --distpath ../ \
+            --workpath build_tmp \
+            --noconfirm
+
+      - name: Create DMG
+        run: |
+          hdiutil create \
+            -volname "InfluencerSeeder" \
+            -srcfolder "인플루언서시딩기.app" \
+            -ov -format UDZO \
+            "InfluencerSeeder-${{ github.ref_name }}-mac.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: "InfluencerSeeder-${{ github.ref_name }}-mac.dmg"
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: src/requirements.txt
+
+      - name: Install dependencies
+        working-directory: src
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build .exe folder
+        working-directory: src
+        run: |
+          python -m PyInstaller build.spec `
+            --distpath ../ `
+            --workpath build_tmp `
+            --noconfirm
+
+      - name: Zip output
+        run: |
+          Compress-Archive -Path "인플루언서시딩기" `
+            -DestinationPath "InfluencerSeeder-${{ github.ref_name }}-windows.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: "InfluencerSeeder-${{ github.ref_name }}-windows.zip"
+
+  release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-zip
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            InfluencerSeeder-${{ github.ref_name }}-mac.dmg
+            InfluencerSeeder-${{ github.ref_name }}-windows.zip
