@@ -45,7 +45,7 @@ jobs:
           name: changelog
           path: changelog.txt
 
-  build-macos-arm:
+  build-macos:
     needs: bump-version
     runs-on: macos-latest
     steps:
@@ -105,79 +105,12 @@ jobs:
             -volname "InfluencerSeeder" \
             -srcfolder dmg_staging \
             -ov -format UDZO \
-            "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac-arm.dmg"
+            "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-arm-dmg
-          path: "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac-arm.dmg"
-
-  build-macos-intel:
-    needs: bump-version
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: src/requirements.txt
-
-      - name: Install dependencies
-        working-directory: src
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
-
-      - name: Generate icon.icns from icon.png
-        run: |
-          mkdir -p src/assets/icon.iconset
-          sips -z 16 16     src/assets/icon.png --out src/assets/icon.iconset/icon_16x16.png
-          sips -z 32 32     src/assets/icon.png --out src/assets/icon.iconset/icon_16x16@2x.png
-          sips -z 32 32     src/assets/icon.png --out src/assets/icon.iconset/icon_32x32.png
-          sips -z 64 64     src/assets/icon.png --out src/assets/icon.iconset/icon_32x32@2x.png
-          sips -z 128 128   src/assets/icon.png --out src/assets/icon.iconset/icon_128x128.png
-          sips -z 256 256   src/assets/icon.png --out src/assets/icon.iconset/icon_128x128@2x.png
-          sips -z 256 256   src/assets/icon.png --out src/assets/icon.iconset/icon_256x256.png
-          sips -z 512 512   src/assets/icon.png --out src/assets/icon.iconset/icon_256x256@2x.png
-          sips -z 512 512   src/assets/icon.png --out src/assets/icon.iconset/icon_512x512.png
-          sips -z 1024 1024 src/assets/icon.png --out src/assets/icon.iconset/icon_512x512@2x.png
-          iconutil -c icns src/assets/icon.iconset -o src/assets/icon.icns
-
-      - name: Build .app
-        working-directory: src
-        run: |
-          python -m PyInstaller build.spec \
-            --distpath ../ \
-            --workpath build_tmp \
-            --noconfirm
-
-      - name: Ad-hoc sign .app
-        run: |
-          APP="인플루언서시딩기.app"
-          find "$APP" -type f \( -name "*.dylib" -o -name "*.so" \) \
-            -exec codesign --force --sign - {} \; 2>/dev/null || true
-          find "$APP" -name "*.framework" -type d | sort -r | \
-            xargs -I {} codesign --force --sign - {} 2>/dev/null || true
-          codesign --force --sign - "$APP"
-
-      - name: Create DMG
-        run: |
-          mkdir dmg_staging
-          cp -R "인플루언서시딩기.app" dmg_staging/
-          cp scripts/처음_여기서_실행하세요.command dmg_staging/
-          chmod +x "dmg_staging/처음_여기서_실행하세요.command"
-          hdiutil create \
-            -volname "InfluencerSeeder" \
-            -srcfolder dmg_staging \
-            -ov -format UDZO \
-            "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac-intel.dmg"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-intel-dmg
-          path: "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac-intel.dmg"
+          name: macos-dmg
+          path: "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac.dmg"
 
   build-windows:
     needs: bump-version
@@ -216,7 +149,7 @@ jobs:
           path: "InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-windows.zip"
 
   release:
-    needs: [bump-version, build-macos-arm, build-macos-intel, build-windows]
+    needs: [bump-version, build-macos, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -227,11 +160,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: macos-arm-dmg
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: macos-intel-dmg
+          name: macos-dmg
 
       - uses: actions/download-artifact@v4
         with:
@@ -242,6 +171,5 @@ jobs:
           tag_name: ${{ needs.bump-version.outputs.new_tag }}
           body_path: changelog.txt
           files: |
-            InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac-arm.dmg
-            InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac-intel.dmg
+            InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-mac.dmg
             InfluencerSeeder-${{ needs.bump-version.outputs.new_tag }}-windows.zip
